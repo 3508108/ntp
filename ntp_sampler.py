@@ -25,8 +25,8 @@ RANDORG_URL   = (
     "?num={n}&min={min}&max={max}&col=1&base=10&format=plain&rnd=new"
 )
 
-HEARTBEAT_INTERVAL = 5     # seconds between heartbeats
-DOWNTIME_THRESHOLD = 15    # gap > this → recorded as downtime
+HEARTBEAT_INTERVAL = 2     # seconds between heartbeats
+DOWNTIME_THRESHOLD = 8     # gap > this → recorded as downtime (restart ~5-8s, reload <2s)
 
 FALLBACK_SERVERS = [
     "time-a-g.nist.gov",   "time-b-g.nist.gov",   "time-c-g.nist.gov",
