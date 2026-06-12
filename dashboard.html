@@ -153,10 +153,9 @@
       <div class="srv-time-val" id="srv-delta">—</div>
       <div class="srv-refresh-hint">client − server</div>
     </div>
-    <div class="srv-time-card">
-      <div class="lbl">next оновлення</div>
-      <div class="srv-time-val" id="srv-next">—</div>
-      <div class="srv-refresh-hint">10 хв цикл</div>
+    <div class="srv-time-card" style="display:flex;flex-direction:column;justify-content:center">
+      <button class="btn" onclick="fetchServerTime()" style="letter-spacing:2px">↻ оновити</button>
+      <div class="srv-refresh-hint" id="srv-rtt" style="margin-top:6px;text-align:center"></div>
     </div>
   </div>
 
@@ -562,57 +561,36 @@
     }
 
     // ── server time ─────────────────────────────────────────────────────
-    // Fetch once per 10 min → store offset → tick every second
-    const SRV_INTERVAL = 600;   // re-sync interval (seconds)
-    let _srvOffset  = null;     // ms: Date.now() - corrected_server_ms
-    let _srvNextIn  = SRV_INTERVAL;
-    let _srvRtt     = null;
-    let _srvFetched = null;
-
+    // Static snapshot — fetched on load and on manual ↻ click
     function fetchServerTime() {
+      const btn = document.querySelector('[onclick="fetchServerTime()"]');
+      if (btn) { btn.disabled = true; btn.textContent = '↻ ...'; }
       const t0 = Date.now();
       fetch('/ntp/server-time').then(r => r.json()).then(d => {
-        const rtt   = Date.now() - t0;
-        const srvMs = d.ts * 1000 + rtt / 2;   // RTT-corrected
-        _srvOffset  = Date.now() - srvMs;        // client ahead (+) or behind (-)
-        _srvRtt     = rtt;
-        _srvFetched = d.fetched;
-        _srvNextIn  = SRV_INTERVAL;
-        tickServerTime();
+        const rtt    = Date.now() - t0;
+        const srvMs  = d.ts * 1000 + rtt / 2;     // RTT-corrected
+        const offset = Date.now() - srvMs;
+        const srvNow = new Date(Date.now() - offset);
+        const pad = n => String(n).padStart(2,'0');
+        const utcStr = srvNow.getUTCFullYear()+'-'+pad(srvNow.getUTCMonth()+1)+'-'+pad(srvNow.getUTCDate())+
+                       ' '+pad(srvNow.getUTCHours())+':'+pad(srvNow.getUTCMinutes())+':'+pad(srvNow.getUTCSeconds());
+        document.getElementById('srv-utc').textContent   = utcStr;
+        document.getElementById('srv-fetched').textContent = d.fetched;
+
+        const abs  = Math.abs(Math.round(offset));
+        const sign = offset >= 0 ? '+' : '−';
+        const cls  = abs < 200 ? 'srv-delta-ok' : abs < 1000 ? 'srv-delta-warn' : 'srv-delta-err';
+        const del  = document.getElementById('srv-delta');
+        del.textContent = sign + abs + 'ms';
+        del.className   = 'srv-time-val ' + cls;
+
+        document.getElementById('srv-rtt').textContent = 'rtt ' + rtt + 'ms';
       }).catch(() => {
         document.getElementById('srv-utc').textContent = '— error';
+      }).finally(() => {
+        if (btn) { btn.disabled = false; btn.textContent = '↻ оновити'; }
       });
     }
-
-    function tickServerTime() {
-      if (_srvOffset === null) return;
-      const srvNow = new Date(Date.now() - _srvOffset);
-      const pad = n => String(n).padStart(2,'0');
-      document.getElementById('srv-utc').textContent =
-        srvNow.getUTCFullYear()+'-'+pad(srvNow.getUTCMonth()+1)+'-'+pad(srvNow.getUTCDate())+
-        ' '+pad(srvNow.getUTCHours())+':'+pad(srvNow.getUTCMinutes())+':'+pad(srvNow.getUTCSeconds());
-
-      const abs = Math.abs(Math.round(_srvOffset));
-      const sign = _srvOffset >= 0 ? '+' : '−';
-      const cls  = abs < 200 ? 'srv-delta-ok' : abs < 1000 ? 'srv-delta-warn' : 'srv-delta-err';
-      const del  = document.getElementById('srv-delta');
-      del.textContent = sign + abs + 'ms';
-      del.className   = 'srv-time-val ' + cls;
-
-      if (_srvFetched)
-        document.getElementById('srv-fetched').textContent =
-          'synced ' + _srvFetched + ' · rtt ' + _srvRtt + 'ms';
-    }
-
-    // Tick every second + countdown to next re-sync
-    setInterval(() => {
-      tickServerTime();
-      _srvNextIn = Math.max(0, _srvNextIn - 1);
-      const m = Math.floor(_srvNextIn / 60);
-      const s = String(_srvNextIn % 60).padStart(2, '0');
-      document.getElementById('srv-next').textContent = m + ':' + s;
-      if (_srvNextIn === 0) fetchServerTime();  // re-sync
-    }, 1000);
 
     fetchServerTime();  // initial fetch on load
 
