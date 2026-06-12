@@ -35,9 +35,16 @@ FALLBACK_SERVERS = [
     "time-d-wwv.nist.gov", "time-e-wwv.nist.gov",
     "time-a-b.nist.gov",   "time-b-b.nist.gov",    "time-c-b.nist.gov",
     "time-d-b.nist.gov",   "time-e-b.nist.gov",
-    "ntp-b.nist.gov",      "ntp-wwv.nist.gov",     "ntp.nist.gov",
+    "ntp.nist.gov",
 ]
 _SKIP = ("www.", "ftp.", "mail.", "smtp.")
+
+# Servers permanently excluded from the pool
+BLOCKED_SERVERS = {
+    "ntp-b.nist.gov",
+    "ntp-d.nist.gov",
+    "ntp-wwv.nist.gov",
+}
 
 # Extra servers always merged into the pool (non-NIST sources)
 EXTRA_SERVERS = [
@@ -166,8 +173,11 @@ class NTPSampler:
                 pass
         if len(nist) < 5:
             nist = FALLBACK_SERVERS[:]
-        # Merge: NIST first, then extra — deduplicate
-        merged = list(dict.fromkeys(nist + EXTRA_SERVERS))
+        # Merge: NIST first, then extra — filter blocked — deduplicate
+        merged = [
+            s for s in dict.fromkeys(nist + EXTRA_SERVERS)
+            if s not in BLOCKED_SERVERS
+        ]
         with self._lock:
             self._servers = merged
 
