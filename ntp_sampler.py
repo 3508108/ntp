@@ -99,6 +99,15 @@ class NTPSampler:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_hb_ts ON heartbeat(ts)"
             )
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS deploy_log (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    deployed_at REAL    NOT NULL,
+                    duration_ms INTEGER,
+                    git_hash    TEXT,
+                    message     TEXT
+                )
+            """)
             row = conn.execute("SELECT COUNT(*) FROM ntp_samples").fetchone()
             self._total = row[0] if row else 0
 
@@ -404,6 +413,43 @@ class NTPSampler:
             "last_started_fmt": datetime.fromtimestamp(last[1]).strftime("%d %b %H:%M") if last else None,
             "monitoring_since": datetime.fromtimestamp(first).strftime("%d %b %H:%M") if first else None,
         }
+
+    def log_deploy(self, duration_ms=None, git_hash=None, message=None):
+        """Record a deploy event."""
+        now = time.time()
+        with sqlite3.connect(self._db_path) as conn:
+            conn.execute(
+                """INSERT INTO deploy_log (deployed_at, duration_ms, git_hash, message)
+                   VALUES (?, ?, ?, ?)""",
+                (now, duration_ms, git_hash, (message or "")[:120]),
+            )
+        return {
+            "deployed_at": now,
+            "ts_fmt":      datetime.fromtimestamp(now).strftime("%d %b %H:%M:%S"),
+            "duration_ms": duration_ms,
+            "git_hash":    git_hash,
+            "message":     message,
+        }
+
+    def deploys_recent(self, n=20):
+        """Return n most recent deploys."""
+        with sqlite3.connect(self._db_path) as conn:
+            rows = conn.execute(
+                """SELECT deployed_at, duration_ms, git_hash, message
+                   FROM deploy_log ORDER BY deployed_at DESC LIMIT ?""",
+                (n,),
+            ).fetchall()
+        return [
+            {
+                "deployed_at": r[0],
+                "duration_ms": r[1],
+                "git_hash":    r[2] or "",
+                "message":     r[3] or "",
+                "ts_fmt":      datetime.fromtimestamp(r[0]).strftime("%H:%M:%S"),
+                "date_fmt":    datetime.fromtimestamp(r[0]).strftime("%d %b"),
+            }
+            for r in rows
+        ]
 
     def db_clear(self):
         with sqlite3.connect(self._db_path) as conn:

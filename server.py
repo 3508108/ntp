@@ -75,6 +75,23 @@ def ntp_uptime_stats():
     return sampler.uptime_stats()
 
 
+@app.route("/ntp/deploy", methods=["POST"])
+def ntp_deploy():
+    data        = request.get_json(force=True, silent=True) or {}
+    duration_ms = data.get("duration_ms")
+    git_hash    = data.get("git_hash", "")[:12]
+    message     = data.get("message", "")[:120]
+    event       = sampler.log_deploy(duration_ms=duration_ms,
+                                     git_hash=git_hash, message=message)
+    return event
+
+
+@app.route("/ntp/deploys")
+def ntp_deploys():
+    n = min(int(request.args.get("n", 20)), 100)
+    return {"deploys": sampler.deploys_recent(n)}
+
+
 # ── SSE streams ────────────────────────────────────────────────────────────────
 
 @app.route("/events/ntp")

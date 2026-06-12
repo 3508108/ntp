@@ -89,6 +89,12 @@
     .log-cols.dt  { grid-template-columns:52px 62px 88px 1fr; }
     .log-entry.dt { grid-template-columns:52px 62px 88px 1fr; }
 
+    /* deploy log */
+    .log-cols.dep  { grid-template-columns:52px 62px 68px 60px 1fr; }
+    .log-entry.dep { grid-template-columns:52px 62px 68px 60px 1fr; }
+    .dep-hash { color:#4ec9b0; font-size:0.68rem; font-family:'Courier New',monospace; }
+    .dep-dur  { color:#9cdcfe; }
+
     /* servers list panel */
     .srv-panel { background:#12121a; border:1px solid #1e1e28; border-radius:7px; margin-bottom:10px; display:none; }
     .srv-panel.open { display:block; }
@@ -215,6 +221,18 @@
       <span>date</span><span>started</span><span>duration</span><span>reason</span>
     </div>
     <div class="log-body" id="dt-log" style="max-height:160px"></div>
+  </div>
+
+  <!-- deploy log -->
+  <div class="log-panel" id="dep-panel">
+    <div class="log-header">
+      <span>▶ deploy log · make deploy → git pull → gunicorn reload</span>
+      <button class="burger" id="dep-burger" onclick="toggleDepLog()">≡</button>
+    </div>
+    <div class="log-cols dep">
+      <span>date</span><span>time</span><span>took</span><span>hash</span><span>message</span>
+    </div>
+    <div class="log-body" id="dep-log" style="max-height:160px"></div>
   </div>
 
   <!-- servers panel -->
@@ -453,9 +471,45 @@
       }).catch(() => {});
     }
 
+    // ── deploy log ─────────────────────────────────────────────────────
+    let _depOpen = true;
+    function toggleDepLog() {
+      _depOpen = !_depOpen;
+      document.getElementById('dep-log').classList.toggle('collapsed', !_depOpen);
+      document.getElementById('dep-burger').textContent = _depOpen ? '✕' : '≡';
+    }
+
+    function appendDepRow(d) {
+      const row = document.createElement('div');
+      row.className = 'log-entry dep';
+      const dur = d.duration_ms != null
+        ? (d.duration_ms >= 1000 ? (d.duration_ms/1000).toFixed(1)+'s' : d.duration_ms+'ms')
+        : '—';
+      row.innerHTML =
+        `<span class="c3">${d.date_fmt}</span>` +
+        `<span class="c0">${d.ts_fmt}</span>` +
+        `<span class="dep-dur">${dur}</span>` +
+        `<span class="dep-hash">${d.git_hash ? d.git_hash.slice(0,7) : '—'}</span>` +
+        `<span class="c3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${d.message}">${d.message || '—'}</span>`;
+      document.getElementById('dep-log').appendChild(row);
+    }
+
+    function loadDeploys() {
+      fetch('/ntp/deploys?n=20').then(r => r.json()).then(d => {
+        const log = document.getElementById('dep-log');
+        log.innerHTML = '';
+        if (!d.deploys.length) {
+          log.innerHTML = '<div style="padding:8px 12px;font-size:0.68rem;color:#404055">no deploys recorded</div>';
+          return;
+        }
+        d.deploys.forEach(e => appendDepRow(e));
+      });
+    }
+
     loadDowntime();
     loadUptimeStats();
-    setInterval(() => { loadUptimeStats(); loadDowntime(); }, 15000);
+    loadDeploys();
+    setInterval(() => { loadUptimeStats(); loadDowntime(); loadDeploys(); }, 30000);
 
     // ── NTP controls ───────────────────────────────────────────────────────────
     // auto-load recent samples on page open
