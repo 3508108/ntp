@@ -18,6 +18,7 @@ CORS(app)
 ntp_queue   = queue.Queue(maxsize=100)
 sampler     = NTPSampler()
 sampler.subscribe(ntp_queue)
+sampler.start()   # always running — no manual start/stop
 
 
 # ── pages ──────────────────────────────────────────────────────────────────────

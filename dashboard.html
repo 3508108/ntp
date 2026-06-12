@@ -11,6 +11,8 @@
     .header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px; }
     .header h1 { font-size:0.85rem; color:#c9a84c; letter-spacing:3px; text-transform:uppercase; }
     .header .meta { font-size:0.62rem; color:#555568; letter-spacing:2px; }
+    .utc-clock { font-size:0.78rem; color:#c8c8d4; letter-spacing:2px; font-variant-numeric:tabular-nums; }
+    .utc-label { font-size:0.58rem; color:#5a5a70; letter-spacing:3px; text-transform:uppercase; margin-right:6px; }
 
     /* sys bar */
     .sys-bar { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px; }
@@ -107,6 +109,9 @@
 
   <div class="header">
     <h1>⊙ ntp sampler &nbsp;·&nbsp; nist.gov</h1>
+    <span style="display:flex;align-items:baseline;gap:8px">
+      <span class="utc-label">UTC</span><span class="utc-clock" id="utc-clock">—</span>
+    </span>
     <span class="meta" id="h-ip">104.248.21.29 · port 8080</span>
   </div>
 
@@ -177,8 +182,7 @@
 
   <!-- controls -->
   <div class="controls">
-    <button class="btn" id="btn-start" onclick="ntpStart()" style="color:#c9a84c;border-color:#c9a84c44">▶ START</button>
-    <button class="btn" id="btn-stop"  onclick="ntpStop()"  disabled>■ STOP</button>
+    <span class="btn" style="color:#6fcf97;border-color:#6fcf9730;cursor:default"><span class="dot" style="margin-right:5px"></span>always running</span>
     <div class="sep"></div>
     <button class="btn" onclick="toggleServers()">⊞ servers</button>
     <button class="btn" onclick="clearLog()">✕ clear log</button>
@@ -353,26 +357,10 @@
     }
 
     // ── NTP controls ───────────────────────────────────────────────────────────
-    function ntpStart() {
-      fetch('/ntp/start').then(() => {
-        document.getElementById('btn-start').disabled = true;
-        document.getElementById('btn-stop').disabled  = false;
-        updateBadge(true);
-        toast('▶ NTP sampler started');
-        // load recent samples from DB on start
-        fetch('/ntp/recent?n=50').then(r => r.json()).then(data => {
-          data.samples.reverse().forEach(s => appendRow(s));
-        });
-      });
-    }
-    function ntpStop() {
-      fetch('/ntp/stop').then(() => {
-        document.getElementById('btn-start').disabled = false;
-        document.getElementById('btn-stop').disabled  = true;
-        updateBadge(false);
-        toast('■ NTP sampler stopped');
-      });
-    }
+    // auto-load recent samples on page open
+    fetch('/ntp/recent?n=50').then(r => r.json()).then(data => {
+      data.samples.reverse().forEach(s => appendRow(s));
+    });
 
     // ── DB clear ───────────────────────────────────────────────────────────────
     function showClear()    { document.getElementById('clear-overlay').classList.add('show'); }
@@ -388,6 +376,18 @@
         toast('✓ DB cleared');
       });
     }
+
+    // ── UTC clock ──────────────────────────────────────────────────────────────
+    function tickClock() {
+      const now = new Date();
+      const hh  = String(now.getUTCHours()).padStart(2,'0');
+      const mm  = String(now.getUTCMinutes()).padStart(2,'0');
+      const ss  = String(now.getUTCSeconds()).padStart(2,'0');
+      const ms  = String(now.getUTCMilliseconds()).padStart(3,'0');
+      document.getElementById('utc-clock').textContent = `${hh}:${mm}:${ss}.${ms}`;
+    }
+    tickClock();
+    setInterval(tickClock, 50);
 
     // ── init ───────────────────────────────────────────────────────────────────
     connectMetrics();
