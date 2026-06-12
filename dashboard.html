@@ -13,6 +13,10 @@
     .header .meta { font-size:0.62rem; color:#555568; letter-spacing:2px; }
     .utc-clock { font-size:0.78rem; color:#c8c8d4; letter-spacing:2px; font-variant-numeric:tabular-nums; }
     .utc-label { font-size:0.58rem; color:#5a5a70; letter-spacing:3px; text-transform:uppercase; margin-right:6px; }
+    .tz-btn { background:none; border:1px solid #2a2a38; color:#5a5a70; font-family:'Courier New',monospace;
+              font-size:0.56rem; letter-spacing:2px; padding:1px 6px; border-radius:3px; cursor:pointer;
+              transition:all 0.15s; margin-left:8px; text-transform:uppercase; }
+    .tz-btn:hover { border-color:#c9a84c55; color:#c9a84c; }
 
     /* server time block */
     .srv-time-bar { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px; }
@@ -135,8 +139,10 @@
 
   <div class="header">
     <h1>⊙ ntp sampler &nbsp;·&nbsp; nist.gov</h1>
-    <span style="display:flex;align-items:baseline;gap:8px">
-      <span class="utc-label">UTC</span><span class="utc-clock" id="utc-clock">—</span>
+    <span style="display:flex;align-items:baseline;gap:4px">
+      <span class="utc-label" id="hdr-tz-label">Kyiv</span>
+      <span class="utc-clock" id="utc-clock">—</span>
+      <button class="tz-btn" id="tz-toggle-btn" onclick="toggleTz()">UTC</button>
     </span>
     <span class="meta" id="h-ip">104.248.21.29 · port 8080</span>
   </div>
@@ -144,7 +150,10 @@
   <!-- server time block (polls every 10 min) -->
   <div class="srv-time-bar">
     <div class="srv-time-card">
-      <div class="lbl">server time · UTC</div>
+      <div class="lbl">
+        server time · <span id="srv-tz-label">Kyiv</span>
+        <button class="tz-btn" id="srv-tz-btn" onclick="toggleTz()" style="margin-left:4px">UTC</button>
+      </div>
       <div class="srv-time-val" id="srv-utc">—</div>
       <div class="srv-refresh-hint" id="srv-fetched"></div>
     </div>
@@ -561,6 +570,54 @@
       });
     }
 
+    // ── timezone toggle ───────────────────────────────────────────────
+    let _showUtc = false;   // false = Kyiv (default), true = UTC
+    const KYIV_TZ = 'Europe/Kiev';
+
+    // Extract date parts in any IANA timezone
+    function tzParts(date, tz) {
+      return new Intl.DateTimeFormat('en', {
+        timeZone: tz,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false,
+      }).formatToParts(date).reduce((a, p) => {
+        if (p.type !== 'literal') a[p.type] = p.value;
+        return a;
+      }, {});
+    }
+
+    function fmtDateTime(date) {
+      if (_showUtc) {
+        const pad = n => String(n).padStart(2,'0');
+        return date.getUTCFullYear()+'-'+pad(date.getUTCMonth()+1)+'-'+pad(date.getUTCDate())+
+               ' '+pad(date.getUTCHours())+':'+pad(date.getUTCMinutes())+':'+pad(date.getUTCSeconds());
+      }
+      const p = tzParts(date, KYIV_TZ);
+      return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
+    }
+
+    function fmtTimeMs(date) {
+      const ms = String(date.getMilliseconds()).padStart(3,'0');
+      if (_showUtc) {
+        const pad = n => String(n).padStart(2,'0');
+        return pad(date.getUTCHours())+':'+pad(date.getUTCMinutes())+':'+pad(date.getUTCSeconds())+'.'+ms;
+      }
+      const p = tzParts(date, KYIV_TZ);
+      return `${p.hour}:${p.minute}:${p.second}.${ms}`;
+    }
+
+    function toggleTz() {
+      _showUtc = !_showUtc;
+      const label = _showUtc ? 'UTC' : 'Kyiv';
+      const btnTxt = _showUtc ? 'KYV' : 'UTC';
+      document.getElementById('hdr-tz-label').textContent = label;
+      document.getElementById('srv-tz-label').textContent = label;
+      document.getElementById('tz-toggle-btn').textContent  = btnTxt;
+      document.getElementById('srv-tz-btn').textContent     = btnTxt;
+      tickServerTime();
+    }
+
     // ── server time ─────────────────────────────────────────────────────
     // Fetch once per 10 min → store offset → tick every second
     const SRV_INTERVAL = 600;   // re-sync interval (seconds)
@@ -586,16 +643,8 @@
 
     function tickServerTime() {
       if (_srvOffset === null) return;
-      // Current server time = now minus the stored offset
-      const srvNow   = new Date(Date.now() - _srvOffset);
-      const pad = n => String(n).padStart(2, '0');
-      const utcStr   = srvNow.getUTCFullYear() + '-' +
-                       pad(srvNow.getUTCMonth() + 1) + '-' +
-                       pad(srvNow.getUTCDate()) + ' ' +
-                       pad(srvNow.getUTCHours()) + ':' +
-                       pad(srvNow.getUTCMinutes()) + ':' +
-                       pad(srvNow.getUTCSeconds());
-      document.getElementById('srv-utc').textContent = utcStr;
+      const srvNow = new Date(Date.now() - _srvOffset);
+      document.getElementById('srv-utc').textContent = fmtDateTime(srvNow);
 
       const abs = Math.abs(Math.round(_srvOffset));
       const sign = _srvOffset >= 0 ? '+' : '−';
@@ -623,12 +672,7 @@
 
     // ── UTC clock ──────────────────────────────────────────────────────────────
     function tickClock() {
-      const now = new Date();
-      const hh  = String(now.getUTCHours()).padStart(2,'0');
-      const mm  = String(now.getUTCMinutes()).padStart(2,'0');
-      const ss  = String(now.getUTCSeconds()).padStart(2,'0');
-      const ms  = String(now.getUTCMilliseconds()).padStart(3,'0');
-      document.getElementById('utc-clock').textContent = `${hh}:${mm}:${ss}.${ms}`;
+      document.getElementById('utc-clock').textContent = fmtTimeMs(new Date());
     }
     tickClock();
     setInterval(tickClock, 50);
