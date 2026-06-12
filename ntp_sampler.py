@@ -85,6 +85,7 @@ class NTPSampler:
 
     def _init_db(self):
         with sqlite3.connect(self._db_path) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")  # safe concurrent access during reload
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS ntp_samples (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -340,6 +341,24 @@ class NTPSampler:
     def stop(self):
         with self._lock:
             self._running = False
+
+    def graceful_stop(self, timeout=12):
+        """Called on SIGTERM: finish in-flight sample, write final heartbeat, then stop.
+        Safe to call from signal handler.
+        """
+        with self._lock:
+            self._running = False
+        # write a final heartbeat so no false-positive downtime is recorded
+        try:
+            with sqlite3.connect(self._db_path, timeout=3) as conn:
+                conn.execute("INSERT INTO heartbeat (ts) VALUES (?)", (time.time(),))
+        except Exception:
+            pass
+        # wait for the NTP sample thread to finish its current query
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=timeout)
+        if self._hb_thread and self._hb_thread.is_alive():
+            self._hb_thread.join(timeout=2)
 
     def status(self):
         db_size = os.path.getsize(self._db_path) if os.path.exists(self._db_path) else 0

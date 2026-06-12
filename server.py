@@ -6,6 +6,7 @@ Open:  http://localhost:8080
 import json
 import time
 import queue
+import signal
 
 import psutil
 from flask import Flask, Response, send_file, request
@@ -19,6 +20,17 @@ ntp_queue   = queue.Queue(maxsize=100)
 sampler     = NTPSampler()
 sampler.subscribe(ntp_queue)
 sampler.start()   # always running — no manual start/stop
+
+
+def _graceful_shutdown(signum, frame):
+    """On SIGTERM/SIGINT: finish in-flight NTP sample, write final heartbeat.
+    Gunicorn's graceful-timeout gives us up to 15s before SIGKILL.
+    """
+    sampler.graceful_stop(timeout=12)
+
+
+signal.signal(signal.SIGTERM, _graceful_shutdown)
+signal.signal(signal.SIGINT,  _graceful_shutdown)
 
 
 # ── pages ──────────────────────────────────────────────────────────────────────
