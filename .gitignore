@@ -1,3 +1,5 @@
 .env
+.pat
 __pycache__/
 *.db
+*.pyc
