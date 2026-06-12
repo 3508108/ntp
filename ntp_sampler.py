@@ -25,6 +25,9 @@ RANDORG_URL   = (
     "?num={n}&min={min}&max={max}&col=1&base=10&format=plain&rnd=new"
 )
 
+HEARTBEAT_INTERVAL = 5     # seconds between heartbeats
+DOWNTIME_THRESHOLD = 15    # gap > this → recorded as downtime
+
 FALLBACK_SERVERS = [
     "time-a-g.nist.gov",   "time-b-g.nist.gov",   "time-c-g.nist.gov",
     "time-d-g.nist.gov",   "time-e-g.nist.gov",   "time-f-g.nist.gov",
@@ -52,7 +55,9 @@ class NTPSampler:
         self._last_sample   = None
         self._total         = 0
         self._queues        = []   # SSE subscriber queues
+        self._hb_thread     = None
         self._init_db()
+        self._detect_startup_downtime()
         self._refresh_servers()
 
     # ── database ───────────────────────────────────────────────────────────────
@@ -76,8 +81,46 @@ class NTPSampler:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_ntp_ts ON ntp_samples(ts)"
             )
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS heartbeat (
+                    id  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts  REAL NOT NULL
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS downtime_log (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at  REAL NOT NULL,
+                    ended_at    REAL NOT NULL,
+                    duration_s  REAL NOT NULL,
+                    reason      TEXT DEFAULT 'service_restart'
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_hb_ts ON heartbeat(ts)"
+            )
             row = conn.execute("SELECT COUNT(*) FROM ntp_samples").fetchone()
             self._total = row[0] if row else 0
+
+    def _detect_startup_downtime(self):
+        """On every startup: check last heartbeat. Gap > threshold = downtime."""
+        now = time.time()
+        with sqlite3.connect(self._db_path) as conn:
+            row = conn.execute(
+                "SELECT ts FROM heartbeat ORDER BY ts DESC LIMIT 1"
+            ).fetchone()
+            if row:
+                last_hb = row[0]
+                gap = now - last_hb
+                if gap > DOWNTIME_THRESHOLD:
+                    started_at = last_hb + HEARTBEAT_INTERVAL
+                    duration_s = round(now - started_at, 1)
+                    conn.execute(
+                        """INSERT INTO downtime_log
+                           (started_at, ended_at, duration_s, reason)
+                           VALUES (?, ?, ?, ?)""",
+                        (started_at, now, duration_s, "service_restart"),
+                    )
 
     # ── server list ────────────────────────────────────────────────────────────
 
@@ -212,6 +255,23 @@ class NTPSampler:
             except queue.Full:
                 pass
 
+    # ── heartbeat ──────────────────────────────────────────────────────────────
+
+    def _heartbeat_loop(self):
+        while True:
+            with self._lock:
+                if not self._running:
+                    break
+            now = time.time()
+            with sqlite3.connect(self._db_path) as conn:
+                conn.execute("INSERT INTO heartbeat (ts) VALUES (?)", (now,))
+                # keep only last 5000 heartbeats (~7 hours)
+                conn.execute(
+                    "DELETE FROM heartbeat WHERE id NOT IN "
+                    "(SELECT id FROM heartbeat ORDER BY ts DESC LIMIT 5000)"
+                )
+            time.sleep(HEARTBEAT_INTERVAL)
+
     # ── run loop ───────────────────────────────────────────────────────────────
 
     def _run(self):
@@ -239,8 +299,10 @@ class NTPSampler:
             if self._running:
                 return
             self._running = True
-        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread    = threading.Thread(target=self._run,           daemon=True)
+        self._hb_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
         self._thread.start()
+        self._hb_thread.start()
 
     def stop(self):
         with self._lock:
@@ -286,6 +348,62 @@ class NTPSampler:
     def servers(self):
         with self._lock:
             return self._servers[:]
+
+    def downtime_recent(self, n=20):
+        """Return n most recent downtime events."""
+        with sqlite3.connect(self._db_path) as conn:
+            rows = conn.execute(
+                """SELECT started_at, ended_at, duration_s, reason
+                   FROM downtime_log ORDER BY started_at DESC LIMIT ?""",
+                (n,),
+            ).fetchall()
+        return [
+            {
+                "started_at":  r[0],
+                "ended_at":    r[1],
+                "duration_s":  r[2],
+                "reason":      r[3],
+                "started_fmt": datetime.fromtimestamp(r[0]).strftime("%H:%M:%S"),
+                "date_fmt":    datetime.fromtimestamp(r[0]).strftime("%d %b"),
+            }
+            for r in rows
+        ]
+
+    def uptime_stats(self):
+        """Return uptime percentage and summary since first heartbeat."""
+        now        = time.time()
+        day_start  = now - 86400   # last 24 h
+        with sqlite3.connect(self._db_path) as conn:
+            # first heartbeat ever
+            first = conn.execute("SELECT MIN(ts) FROM heartbeat").fetchone()[0]
+            # total downtime in last 24h
+            rows = conn.execute(
+                """SELECT COALESCE(SUM(duration_s), 0), COUNT(*)
+                   FROM downtime_log WHERE started_at >= ?""",
+                (day_start,),
+            ).fetchone()
+            total_down_24h, incidents_24h = rows
+            # last incident
+            last = conn.execute(
+                "SELECT duration_s, started_at FROM downtime_log ORDER BY started_at DESC LIMIT 1"
+            ).fetchone()
+            # all-time downtime
+            all_down_row = conn.execute(
+                "SELECT COALESCE(SUM(duration_s),0) FROM downtime_log"
+            ).fetchone()
+
+        window     = now - (first or now)
+        all_down   = all_down_row[0] if first else 0
+        uptime_pct = round(100 * (1 - all_down / window), 3) if window > 0 else 100.0
+
+        return {
+            "uptime_pct":       uptime_pct,
+            "total_down_24h_s": round(total_down_24h, 1),
+            "incidents_24h":    incidents_24h,
+            "last_duration_s":  round(last[0], 1) if last else None,
+            "last_started_fmt": datetime.fromtimestamp(last[1]).strftime("%d %b %H:%M") if last else None,
+            "monitoring_since": datetime.fromtimestamp(first).strftime("%d %b %H:%M") if first else None,
+        }
 
     def db_clear(self):
         with sqlite3.connect(self._db_path) as conn:

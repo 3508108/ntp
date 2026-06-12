@@ -64,6 +64,17 @@ def ntp_db_clear():
     return {"status": "cleared"}
 
 
+@app.route("/ntp/downtime")
+def ntp_downtime():
+    n = min(int(request.args.get("n", 20)), 100)
+    return {"events": sampler.downtime_recent(n)}
+
+
+@app.route("/ntp/uptime-stats")
+def ntp_uptime_stats():
+    return sampler.uptime_stats()
+
+
 # ── SSE streams ────────────────────────────────────────────────────────────────
 
 @app.route("/events/ntp")

@@ -79,6 +79,16 @@
     .countdown-val  { color:#8888a0; }
     .bar-ntp { background:#c9a84c66; }
 
+    /* uptime stats */
+    .uptime-pct { font-size:1.2rem; font-variant-numeric:tabular-nums; }
+    .uptime-100 { color:#6fcf97; }
+    .uptime-99  { color:#c9a84c; }
+    .uptime-low { color:#eb5757; }
+
+    /* downtime log */
+    .log-cols.dt  { grid-template-columns:52px 62px 88px 1fr; }
+    .log-entry.dt { grid-template-columns:52px 62px 88px 1fr; }
+
     /* servers list panel */
     .srv-panel { background:#12121a; border:1px solid #1e1e28; border-radius:7px; margin-bottom:10px; display:none; }
     .srv-panel.open { display:block; }
@@ -140,6 +150,30 @@
     <div class="stat"><div class="lbl">DB size</div><div class="val" id="ntp-db">—</div><div class="unit">KB</div></div>
   </div>
 
+  <!-- uptime stats -->
+  <div class="stats-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px">
+    <div class="stat">
+      <div class="lbl">uptime</div>
+      <div class="val uptime-pct uptime-100" id="up-pct">—</div>
+      <div class="unit">all time %</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">downtime 24h</div>
+      <div class="val" id="up-down24">—</div>
+      <div class="unit">seconds</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">incidents 24h</div>
+      <div class="val" id="up-inc">—</div>
+      <div class="unit">events</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">last incident</div>
+      <div class="val" id="up-last" style="font-size:0.85rem">—</div>
+      <div class="unit" id="up-since"></div>
+    </div>
+  </div>
+
   <!-- last server + countdown -->
   <div class="server-card">
     <span class="lbl">last server</span>
@@ -169,6 +203,18 @@
       <span>time</span><span>server</span><span>offset ms</span><span>delay ms</span><span>stratum</span><span>rnd#</span><span>next s</span><span>source</span>
     </div>
     <div class="log-body" id="ntp-log"></div>
+  </div>
+
+  <!-- downtime log -->
+  <div class="log-panel" id="dt-panel">
+    <div class="log-header">
+      <span>⏱ downtime log · heartbeat every 5s · threshold 15s</span>
+      <button class="burger" id="dt-burger" onclick="toggleDtLog()">≡</button>
+    </div>
+    <div class="log-cols dt">
+      <span>date</span><span>started</span><span>duration</span><span>reason</span>
+    </div>
+    <div class="log-body" id="dt-log" style="max-height:160px"></div>
   </div>
 
   <!-- servers panel -->
@@ -356,6 +402,61 @@
       });
     }
 
+    // ── downtime log ───────────────────────────────────────────────────────────
+    let _dtOpen = true;
+    function toggleDtLog() {
+      _dtOpen = !_dtOpen;
+      document.getElementById('dt-log').classList.toggle('collapsed', !_dtOpen);
+      document.getElementById('dt-burger').textContent = _dtOpen ? '✕' : '≡';
+    }
+
+    function fmtDur(s) {
+      if (s == null) return '—';
+      if (s < 60)   return s.toFixed(1) + 's';
+      if (s < 3600) return (s/60).toFixed(1) + 'm';
+      return (s/3600).toFixed(2) + 'h';
+    }
+
+    function appendDtRow(e) {
+      const row = document.createElement('div');
+      row.className = 'log-entry dt';
+      row.innerHTML =
+        `<span class="c3">${e.date_fmt}</span>` +
+        `<span class="c0">${e.started_fmt}</span>` +
+        `<span class="err">${fmtDur(e.duration_s)}</span>` +
+        `<span class="c3">${e.reason}</span>`;
+      document.getElementById('dt-log').appendChild(row);
+    }
+
+    function loadDowntime() {
+      fetch('/ntp/downtime?n=20').then(r => r.json()).then(d => {
+        const log = document.getElementById('dt-log');
+        log.innerHTML = '';
+        if (!d.events.length) {
+          log.innerHTML = '<div style="padding:8px 12px;font-size:0.68rem;color:#404055">no downtime recorded</div>';
+          return;
+        }
+        d.events.forEach(e => appendDtRow(e));
+      });
+    }
+
+    function loadUptimeStats() {
+      fetch('/ntp/uptime-stats').then(r => r.json()).then(d => {
+        const pct = d.uptime_pct ?? 100;
+        const el  = document.getElementById('up-pct');
+        el.textContent = pct.toFixed(3) + '%';
+        el.className   = 'val uptime-pct ' + (pct >= 99.9 ? 'uptime-100' : pct >= 99 ? 'uptime-99' : 'uptime-low');
+        document.getElementById('up-down24').textContent = d.total_down_24h_s ?? '0';
+        document.getElementById('up-inc').textContent    = d.incidents_24h ?? '0';
+        document.getElementById('up-last').textContent   = d.last_duration_s != null ? fmtDur(d.last_duration_s) : 'none';
+        document.getElementById('up-since').textContent  = d.last_started_fmt ?? (d.monitoring_since ? 'since ' + d.monitoring_since : '');
+      }).catch(() => {});
+    }
+
+    loadDowntime();
+    loadUptimeStats();
+    setInterval(() => { loadUptimeStats(); loadDowntime(); }, 15000);
+
     // ── NTP controls ───────────────────────────────────────────────────────────
     // auto-load recent samples on page open
     fetch('/ntp/recent?n=50').then(r => r.json()).then(data => {
@@ -403,8 +504,6 @@
         document.getElementById('ntp-next-bar').style.width    =
           Math.max(0, 100 - (d.next_in / _maxInterval * 100)) + '%';
         updateBadge(d.running);
-        document.getElementById('btn-start').disabled = d.running;
-        document.getElementById('btn-stop').disabled  = !d.running;
         if (d.last) updateStats(d.last);
       }).catch(() => {});
       setTimeout(pollStatus, 5000);
