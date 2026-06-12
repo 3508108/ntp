@@ -18,8 +18,9 @@ try:
 except ImportError:
     _HAS_REQUESTS = False
 
-NIST_URL    = "https://tf.nist.gov/tf-cgi/servers.cgi"
-RANDORG_URL = (
+NIST_URL      = "https://tf.nist.gov/tf-cgi/servers.cgi"
+QRANDOM_URL   = "https://qrandom.io/api/random/ints?min={min}&max={max}&n={n}"
+RANDORG_URL   = (
     "https://www.random.org/integers/"
     "?num={n}&min={min}&max={max}&col=1&base=10&format=plain&rnd=new"
 )
@@ -107,18 +108,36 @@ class NTPSampler:
     # ── true randomness ────────────────────────────────────────────────────────
 
     def _rand_int(self, lo, hi):
-        """Random integer from random.org; falls back to random.randint."""
+        """Quantum int from qrandom.io → random.org → random.randint fallback.
+        Returns (value, source) tuple.
+        """
         if not _HAS_REQUESTS or lo == hi:
-            return random.randint(lo, hi)
+            return random.randint(lo, hi), "local"
+
+        # 1) qrandom.io — quantum RNG
+        try:
+            url  = QRANDOM_URL.format(min=lo, max=hi, n=1)
+            resp = _requests.get(url, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                nums = data.get("numbers") or data.get("number")
+                if nums and isinstance(nums, list) and len(nums) > 0:
+                    return int(nums[0]), "qrandom"
+        except Exception:
+            pass
+
+        # 2) random.org — atmospheric noise RNG
         try:
             url  = RANDORG_URL.format(n=1, min=lo, max=hi)
             resp = _requests.get(url, timeout=5)
             val  = resp.text.strip()
             if resp.status_code == 200 and val.lstrip("-").isdigit():
-                return int(val)
+                return int(val), "random.org"
         except Exception:
             pass
-        return random.randint(lo, hi)
+
+        # 3) local PRNG fallback
+        return random.randint(lo, hi), "local"
 
     # ── single NTP sample ──────────────────────────────────────────────────────
 
@@ -126,9 +145,9 @@ class NTPSampler:
         with self._lock:
             servers = self._servers[:]
 
-        rand_idx = self._rand_int(0, len(servers) - 1)
-        next_sec = self._rand_int(self._interval_min, self._interval_max)
-        server   = servers[rand_idx]
+        rand_idx, rand_src   = self._rand_int(0, len(servers) - 1)
+        next_sec, _          = self._rand_int(self._interval_min, self._interval_max)
+        server               = servers[rand_idx]
         now      = time.time()
 
         try:
@@ -149,6 +168,7 @@ class NTPSampler:
             "delay_ms":  delay_ms,
             "stratum":   stratum,
             "rand_idx":  rand_idx,
+            "rand_src":  rand_src,
             "next_sec":  next_sec,
             "ok":        ok,
             "error":     error,
@@ -157,13 +177,17 @@ class NTPSampler:
         }
 
         with sqlite3.connect(self._db_path) as conn:
+            # add rand_src column if it doesn't exist (migration)
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(ntp_samples)").fetchall()]
+            if "rand_src" not in cols:
+                conn.execute("ALTER TABLE ntp_samples ADD COLUMN rand_src TEXT")
             conn.execute(
                 """INSERT INTO ntp_samples
                    (server_host, offset_ms, delay_ms, stratum,
-                    rand_idx, next_sec, ok, error, ts)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    rand_idx, next_sec, ok, error, rand_src, ts)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (server, offset_ms, delay_ms, stratum,
-                 rand_idx, next_sec, int(ok), error, now),
+                 rand_idx, next_sec, int(ok), error, rand_src, now),
             )
 
         with self._lock:
@@ -192,7 +216,7 @@ class NTPSampler:
 
     def _run(self):
         self._refresh_servers()
-        countdown = self._rand_int(5, 15)   # first sample within 5–15 s
+        countdown, _ = self._rand_int(5, 15)   # first sample within 5–15 s
 
         while True:
             with self._lock:
@@ -238,7 +262,7 @@ class NTPSampler:
         with sqlite3.connect(self._db_path) as conn:
             rows = conn.execute(
                 """SELECT server_host, offset_ms, delay_ms, stratum,
-                          rand_idx, next_sec, ok, error, ts
+                          rand_idx, next_sec, ok, error, rand_src, ts
                    FROM ntp_samples ORDER BY ts DESC LIMIT ?""",
                 (n,),
             ).fetchall()
@@ -252,8 +276,9 @@ class NTPSampler:
                 "next_sec":  r[5],
                 "ok":        bool(r[6]),
                 "error":     r[7],
-                "ts":        r[8],
-                "ts_fmt":    datetime.fromtimestamp(r[8]).strftime("%H:%M:%S"),
+                "rand_src":  r[8] or "local",
+                "ts":        r[9],
+                "ts_fmt":    datetime.fromtimestamp(r[9]).strftime("%H:%M:%S"),
             }
             for r in rows
         ]

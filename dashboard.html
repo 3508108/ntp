@@ -40,11 +40,11 @@
     .log-header .burger { background:none; border:none; color:#333; cursor:pointer; font-size:0.9rem; padding:0 0 0 8px; line-height:1; transition:color 0.15s; }
     .log-header .burger:hover { color:#888; }
     .log-cols { display:grid; font-size:0.58rem; color:#1e1e1e; padding:3px 12px 1px; letter-spacing:1px; }
-    .log-cols.ntp { grid-template-columns:60px 1fr 76px 72px 52px 42px 54px; }
+    .log-cols.ntp { grid-template-columns:60px 1fr 76px 72px 52px 42px 54px 64px; }
     .log-body { overflow-y:auto; max-height:280px; }
     .log-body.collapsed { display:none; }
     .log-entry { display:grid; font-size:0.7rem; padding:2px 12px; border-bottom:1px solid #0f0f0f; }
-    .log-entry.ntp { grid-template-columns:60px 1fr 76px 72px 52px 42px 54px; }
+    .log-entry.ntp { grid-template-columns:60px 1fr 76px 72px 52px 42px 54px 64px; }
     .log-entry:hover { background:#0f0f0f; }
 
     /* color helpers */
@@ -83,6 +83,11 @@
     .srv-list { display:flex; flex-wrap:wrap; gap:4px; padding:8px 12px; }
     .srv-chip { font-size:0.62rem; color:#333; background:#111; border:1px solid #1a1a1a; border-radius:4px; padding:2px 7px; letter-spacing:1px; }
     .srv-chip.active { color:#56a4f5; border-color:#56a4f522; }
+
+    /* RNG source badges */
+    .src-q  { color:#b57bee; }
+    .src-ro { color:#56a4f5; }
+    .src-lc { color:#333; }
 
     /* toast */
     .toast { position:fixed; bottom:18px; right:18px; background:#111; border:1px solid #c9a84c22; color:#c9a84c; padding:8px 16px; border-radius:6px; font-size:0.68rem; letter-spacing:2px; opacity:0; transform:translateY(8px); transition:all 0.3s; pointer-events:none; }
@@ -156,7 +161,7 @@
       </span>
     </div>
     <div class="log-cols ntp" id="ntp-cols">
-      <span>time</span><span>server</span><span>offset ms</span><span>delay ms</span><span>stratum</span><span>rnd#</span><span>next s</span>
+      <span>time</span><span>server</span><span>offset ms</span><span>delay ms</span><span>stratum</span><span>rnd#</span><span>next s</span><span>source</span>
     </div>
     <div class="log-body" id="ntp-log"></div>
   </div>
@@ -304,12 +309,15 @@
       const str = d.stratum   != null ? `<span class="c3">${d.stratum}</span>`                  : '<span class="err">—</span>';
       const ok  = d.ok ? '' : ' title="' + (d.error||'') + '"';
 
+      const srcClass = d.rand_src === 'qrandom' ? 'src-q' : d.rand_src === 'random.org' ? 'src-ro' : 'src-lc';
+      const srcLabel  = d.rand_src === 'qrandom' ? '⊛ quantum' : d.rand_src === 'random.org' ? '~ atm' : '· local';
       row.innerHTML =
         `<span class="c3">${d.ts_fmt}</span>` +
         `<span class="c2"${ok}>${d.ok ? '' : '⚠ '}${d.server}</span>` +
         off + del + str +
         `<span class="c0">${d.rand_idx ?? '—'}</span>` +
-        `<span class="c3">${d.next_sec ?? '—'}</span>`;
+        `<span class="c3">${d.next_sec ?? '—'}</span>` +
+        `<span class="${srcClass}">${srcLabel}</span>`;
 
       const log = document.getElementById('ntp-log');
       log.appendChild(row);
