@@ -39,6 +39,20 @@ FALLBACK_SERVERS = [
 ]
 _SKIP = ("www.", "ftp.", "mail.", "smtp.")
 
+# Extra servers always merged into the pool (non-NIST sources)
+EXTRA_SERVERS = [
+    "time.cloudflare.com",   # Cloudflare — anycast, ~1ms global
+    "time.google.com",       # Google Public NTP
+    "time1.google.com",
+    "time2.google.com",
+    "time3.google.com",
+    "time4.google.com",
+    "0.pool.ntp.org",        # NTP Pool Project
+    "1.pool.ntp.org",
+    "2.pool.ntp.org",
+    "3.pool.ntp.org",
+]
+
 
 class NTPSampler:
     """Continuously samples NIST NTP servers at random.org-driven random intervals."""
@@ -134,28 +148,28 @@ class NTPSampler:
     # ── server list ────────────────────────────────────────────────────────────
 
     def _refresh_servers(self):
-        """Download the NIST server list; use embedded fallback on failure."""
-        if not _HAS_REQUESTS:
-            with self._lock:
-                self._servers = FALLBACK_SERVERS[:]
-            return
-        try:
-            resp       = _requests.get(NIST_URL, timeout=10)
-            candidates = re.findall(
-                r"\b([a-z0-9][a-z0-9\-\.]*\.nist\.gov)\b", resp.text
-            )
-            servers = [
-                s for s in dict.fromkeys(candidates)
-                if not any(s.startswith(p) for p in _SKIP)
-            ]
-            if len(servers) >= 5:
-                with self._lock:
-                    self._servers = servers
-                return
-        except Exception:
-            pass
+        """Download the NIST server list; use embedded fallback on failure.
+        Always appends EXTRA_SERVERS (Cloudflare, Google, pool.ntp.org).
+        """
+        nist = []
+        if _HAS_REQUESTS:
+            try:
+                resp       = _requests.get(NIST_URL, timeout=10)
+                candidates = re.findall(
+                    r"\b([a-z0-9][a-z0-9\-\.]*\.nist\.gov)\b", resp.text
+                )
+                nist = [
+                    s for s in dict.fromkeys(candidates)
+                    if not any(s.startswith(p) for p in _SKIP)
+                ]
+            except Exception:
+                pass
+        if len(nist) < 5:
+            nist = FALLBACK_SERVERS[:]
+        # Merge: NIST first, then extra — deduplicate
+        merged = list(dict.fromkeys(nist + EXTRA_SERVERS))
         with self._lock:
-            self._servers = FALLBACK_SERVERS[:]
+            self._servers = merged
 
     # ── true randomness ────────────────────────────────────────────────────────
 
