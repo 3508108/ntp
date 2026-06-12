@@ -561,43 +561,65 @@
       });
     }
 
-    // ── server time (every 10 min) ────────────────────────────────────────
-    const SRV_INTERVAL = 600;  // seconds
-    let _srvNextIn = SRV_INTERVAL;
+    // ── server time ─────────────────────────────────────────────────────
+    // Fetch once per 10 min → store offset → tick every second
+    const SRV_INTERVAL = 600;   // re-sync interval (seconds)
+    let _srvOffset  = null;     // ms: Date.now() - corrected_server_ms
+    let _srvNextIn  = SRV_INTERVAL;
+    let _srvRtt     = null;
+    let _srvFetched = null;
 
     function fetchServerTime() {
       const t0 = Date.now();
       fetch('/ntp/server-time').then(r => r.json()).then(d => {
-        const rtt      = Date.now() - t0;          // round-trip ms
-        const srvMs    = d.ts * 1000 + rtt / 2;   // corrected server time
-        const deltaMs  = Math.round(Date.now() - srvMs);
-        const absDelta = Math.abs(deltaMs);
-
-        document.getElementById('srv-utc').textContent   = d.utc;
-        document.getElementById('srv-fetched').textContent = 'fetched ' + d.fetched + ' (rtt ' + rtt + 'ms)';
-
-        const sign  = deltaMs >= 0 ? '+' : '−';
-        const cls   = absDelta < 200 ? 'srv-delta-ok' : absDelta < 1000 ? 'srv-delta-warn' : 'srv-delta-err';
-        const delEl = document.getElementById('srv-delta');
-        delEl.textContent = sign + absDelta + 'ms';
-        delEl.className   = 'srv-time-val ' + cls;
-
-        _srvNextIn = SRV_INTERVAL;
+        const rtt   = Date.now() - t0;
+        const srvMs = d.ts * 1000 + rtt / 2;   // RTT-corrected
+        _srvOffset  = Date.now() - srvMs;        // client ahead (+) or behind (-)
+        _srvRtt     = rtt;
+        _srvFetched = d.fetched;
+        _srvNextIn  = SRV_INTERVAL;
+        tickServerTime();
       }).catch(() => {
         document.getElementById('srv-utc').textContent = '— error';
       });
     }
 
-    // countdown for next fetch
+    function tickServerTime() {
+      if (_srvOffset === null) return;
+      // Current server time = now minus the stored offset
+      const srvNow   = new Date(Date.now() - _srvOffset);
+      const pad = n => String(n).padStart(2, '0');
+      const utcStr   = srvNow.getUTCFullYear() + '-' +
+                       pad(srvNow.getUTCMonth() + 1) + '-' +
+                       pad(srvNow.getUTCDate()) + ' ' +
+                       pad(srvNow.getUTCHours()) + ':' +
+                       pad(srvNow.getUTCMinutes()) + ':' +
+                       pad(srvNow.getUTCSeconds());
+      document.getElementById('srv-utc').textContent = utcStr;
+
+      const abs = Math.abs(Math.round(_srvOffset));
+      const sign = _srvOffset >= 0 ? '+' : '−';
+      const cls  = abs < 200 ? 'srv-delta-ok' : abs < 1000 ? 'srv-delta-warn' : 'srv-delta-err';
+      const del  = document.getElementById('srv-delta');
+      del.textContent = sign + abs + 'ms';
+      del.className   = 'srv-time-val ' + cls;
+
+      if (_srvFetched)
+        document.getElementById('srv-fetched').textContent =
+          'synced ' + _srvFetched + ' · rtt ' + _srvRtt + 'ms';
+    }
+
+    // Tick every second + countdown to next re-sync
     setInterval(() => {
+      tickServerTime();
       _srvNextIn = Math.max(0, _srvNextIn - 1);
       const m = Math.floor(_srvNextIn / 60);
       const s = String(_srvNextIn % 60).padStart(2, '0');
       document.getElementById('srv-next').textContent = m + ':' + s;
-      if (_srvNextIn === 0) fetchServerTime();
+      if (_srvNextIn === 0) fetchServerTime();  // re-sync
     }, 1000);
 
-    fetchServerTime();   // initial fetch on load
+    fetchServerTime();  // initial fetch on load
 
     // ── UTC clock ──────────────────────────────────────────────────────────────
     function tickClock() {
