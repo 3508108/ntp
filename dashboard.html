@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ntp · gr-droplet</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#0a0a0a; color:#ccc; font-family:'Courier New',monospace; padding:20px 24px; }
+
+    .header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px; }
+    .header h1 { font-size:0.85rem; color:#c9a84c; letter-spacing:3px; text-transform:uppercase; }
+    .header .meta { font-size:0.62rem; color:#2a2a2a; letter-spacing:2px; }
+
+    /* sys bar */
+    .sys-bar { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px; }
+    .sys-card { background:#111; border:1px solid #1a1a1a; border-radius:7px; padding:9px 12px; }
+    .sys-row { display:flex; justify-content:space-between; font-size:0.64rem; color:#333; text-transform:uppercase; letter-spacing:2px; margin-bottom:5px; }
+    .sys-val { color:#666; }
+    .bar-track { background:#1a1a1a; border-radius:2px; height:2px; }
+    .bar-fill { height:100%; border-radius:2px; transition:width 0.6s; }
+    .bar-cpu{background:#6fcf97;} .bar-ram{background:#56a4f5;} .bar-disk{background:#eb5757;}
+
+    /* stats row */
+    .stats-row { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:12px; }
+    .stat { background:#111; border:1px solid #1a1a1a; border-radius:7px; padding:9px 10px; text-align:center; }
+    .stat .lbl { font-size:0.58rem; color:#2a2a2a; text-transform:uppercase; letter-spacing:2px; margin-bottom:4px; }
+    .stat .val { font-size:1.2rem; color:#c9a84c; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .stat .unit { font-size:0.58rem; color:#2a2a2a; margin-top:2px; }
+
+    /* last-server card full width */
+    .server-card { background:#111; border:1px solid #1a1a1a; border-radius:7px; padding:9px 14px; margin-bottom:12px; display:flex; align-items:center; gap:10px; }
+    .server-card .lbl { font-size:0.6rem; color:#2a2a2a; text-transform:uppercase; letter-spacing:2px; flex-shrink:0; }
+    .server-card .val { font-size:0.9rem; color:#56a4f5; }
+    .server-card .sub { font-size:0.6rem; color:#333; margin-left:auto; }
+
+    /* NTP log panel */
+    .log-panel { background:#0d0d0d; border:1px solid #161616; border-radius:7px; margin-bottom:10px; }
+    .log-header { display:flex; justify-content:space-between; align-items:center; padding:8px 12px 6px; border-bottom:1px solid #111; font-size:0.62rem; color:#2a2a2a; text-transform:uppercase; letter-spacing:2px; }
+    .log-header .burger { background:none; border:none; color:#333; cursor:pointer; font-size:0.9rem; padding:0 0 0 8px; line-height:1; transition:color 0.15s; }
+    .log-header .burger:hover { color:#888; }
+    .log-cols { display:grid; font-size:0.58rem; color:#1e1e1e; padding:3px 12px 1px; letter-spacing:1px; }
+    .log-cols.ntp { grid-template-columns:60px 1fr 76px 72px 52px 42px 54px; }
+    .log-body { overflow-y:auto; max-height:280px; }
+    .log-body.collapsed { display:none; }
+    .log-entry { display:grid; font-size:0.7rem; padding:2px 12px; border-bottom:1px solid #0f0f0f; }
+    .log-entry.ntp { grid-template-columns:60px 1fr 76px 72px 52px 42px 54px; }
+    .log-entry:hover { background:#0f0f0f; }
+
+    /* color helpers */
+    .c0{color:#c9a84c;} .c1{color:#6fcf97;} .c2{color:#56a4f5;} .c3{color:#252525; overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .ok   { color:#6fcf97; }
+    .warn { color:#c9a84c; }
+    .err  { color:#eb5757; }
+
+    /* dot indicator */
+    .dot { display:inline-block; width:5px; height:5px; border-radius:50%; background:#6fcf97; margin-right:6px; animation:pulse 1.5s infinite; }
+    .dot.off { background:#1e1e1e; animation:none; }
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.2}}
+
+    /* badges */
+    .badge { font-size:0.58rem; letter-spacing:2px; text-transform:uppercase; padding:2px 8px; border-radius:10px; }
+    .badge-run  { background:#6fcf9712; color:#6fcf97; border:1px solid #6fcf9725; }
+    .badge-stop { background:#22222212; color:#444;    border:1px solid #22222225; }
+
+    /* controls */
+    .controls { display:flex; gap:6px; margin-bottom:10px; align-items:center; flex-wrap:wrap; }
+    .sep { width:1px; height:18px; background:#1a1a1a; margin:0 3px; }
+    .btn { background:#111; border:1px solid #222; color:#555; padding:5px 14px; border-radius:4px; font-family:'Courier New',monospace; font-size:0.68rem; letter-spacing:2px; cursor:pointer; transition:all 0.15s; }
+    .btn:hover { border-color:#c9a84c55; color:#c9a84c; }
+    .btn:disabled { opacity:0.2; cursor:default; }
+    .btn-danger:hover { border-color:#eb575755; color:#eb5757; }
+
+    /* countdown bar */
+    .countdown-wrap { background:#111; border:1px solid #1a1a1a; border-radius:7px; padding:8px 12px; margin-bottom:12px; }
+    .countdown-row  { display:flex; justify-content:space-between; font-size:0.6rem; color:#2a2a2a; text-transform:uppercase; letter-spacing:2px; margin-bottom:5px; }
+    .countdown-val  { color:#555; }
+    .bar-ntp { background:#c9a84c55; }
+
+    /* servers list panel */
+    .srv-panel { background:#0d0d0d; border:1px solid #161616; border-radius:7px; margin-bottom:10px; display:none; }
+    .srv-panel.open { display:block; }
+    .srv-list { display:flex; flex-wrap:wrap; gap:4px; padding:8px 12px; }
+    .srv-chip { font-size:0.62rem; color:#333; background:#111; border:1px solid #1a1a1a; border-radius:4px; padding:2px 7px; letter-spacing:1px; }
+    .srv-chip.active { color:#56a4f5; border-color:#56a4f522; }
+
+    /* toast */
+    .toast { position:fixed; bottom:18px; right:18px; background:#111; border:1px solid #c9a84c22; color:#c9a84c; padding:8px 16px; border-radius:6px; font-size:0.68rem; letter-spacing:2px; opacity:0; transform:translateY(8px); transition:all 0.3s; pointer-events:none; }
+    .toast.show { opacity:1; transform:translateY(0); }
+
+    /* clear confirm overlay */
+    .overlay { position:fixed; inset:0; background:#000000aa; display:none; align-items:center; justify-content:center; z-index:100; }
+    .overlay.show { display:flex; }
+    .dialog { background:#111; border:1px solid #2a2a2a; border-radius:8px; padding:24px 28px; text-align:center; }
+    .dialog p { font-size:0.8rem; color:#666; margin-bottom:16px; letter-spacing:1px; }
+    .dialog-btns { display:flex; gap:8px; justify-content:center; }
+
+    .footer { font-size:0.58rem; color:#191919; letter-spacing:2px; margin-top:6px; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>⊙ ntp sampler &nbsp;·&nbsp; nist.gov</h1>
+    <span class="meta" id="h-ip">104.248.21.29 · port 8080</span>
+  </div>
+
+  <!-- system metrics -->
+  <div class="sys-bar">
+    <div class="sys-card">
+      <div class="sys-row"><span>CPU</span><span class="sys-val" id="cpu-val">—</span></div>
+      <div class="bar-track"><div class="bar-fill bar-cpu" id="cpu-bar" style="width:0"></div></div>
+    </div>
+    <div class="sys-card">
+      <div class="sys-row"><span>RAM</span><span class="sys-val" id="ram-val">—</span></div>
+      <div class="bar-track"><div class="bar-fill bar-ram" id="ram-bar" style="width:0"></div></div>
+    </div>
+    <div class="sys-card">
+      <div class="sys-row"><span>DISK</span><span class="sys-val" id="disk-val">—</span></div>
+      <div class="bar-track"><div class="bar-fill bar-disk" id="disk-bar" style="width:0"></div></div>
+    </div>
+  </div>
+
+  <!-- NTP stats -->
+  <div class="stats-row">
+    <div class="stat"><div class="lbl">samples</div><div class="val" id="ntp-total">—</div><div class="unit">all time</div></div>
+    <div class="stat"><div class="lbl">last offset</div><div class="val" id="ntp-offset">—</div><div class="unit">ms</div></div>
+    <div class="stat"><div class="lbl">last delay</div><div class="val" id="ntp-delay">—</div><div class="unit">ms</div></div>
+    <div class="stat"><div class="lbl">stratum</div><div class="val" id="ntp-stratum">—</div><div class="unit">level</div></div>
+    <div class="stat"><div class="lbl">DB size</div><div class="val" id="ntp-db">—</div><div class="unit">KB</div></div>
+  </div>
+
+  <!-- last server + countdown -->
+  <div class="server-card">
+    <span class="lbl">last server</span>
+    <span class="val" id="ntp-server">—</span>
+    <span class="sub" id="ntp-rand">rnd#—</span>
+    <span class="sub" id="ntp-err" style="color:#eb5757;display:none"></span>
+  </div>
+
+  <div class="countdown-wrap">
+    <div class="countdown-row">
+      <span>next sample in</span>
+      <span class="countdown-val"><span id="ntp-next-val">—</span> s &nbsp;·&nbsp; <span id="ntp-servers-count">—</span> servers loaded</span>
+    </div>
+    <div class="bar-track"><div class="bar-fill bar-ntp" id="ntp-next-bar" style="width:0"></div></div>
+  </div>
+
+  <!-- NTP log -->
+  <div class="log-panel">
+    <div class="log-header">
+      <span><span class="dot off" id="ntp-dot"></span>ntp log · random.org → nist.gov → sqlite</span>
+      <span style="display:flex;align-items:center;gap:8px">
+        <span id="ntp-badge" class="badge badge-stop">stopped</span>
+        <button class="burger" id="ntp-burger" onclick="toggleLog()" title="toggle log">≡</button>
+      </span>
+    </div>
+    <div class="log-cols ntp" id="ntp-cols">
+      <span>time</span><span>server</span><span>offset ms</span><span>delay ms</span><span>stratum</span><span>rnd#</span><span>next s</span>
+    </div>
+    <div class="log-body" id="ntp-log"></div>
+  </div>
+
+  <!-- servers panel -->
+  <div class="srv-panel" id="srv-panel">
+    <div class="log-header">
+      <span>nist.gov server pool</span>
+      <button class="burger" onclick="toggleServers()">✕</button>
+    </div>
+    <div class="srv-list" id="srv-list"></div>
+  </div>
+
+  <!-- controls -->
+  <div class="controls">
+    <button class="btn" id="btn-start" onclick="ntpStart()" style="color:#c9a84c;border-color:#c9a84c44">▶ START</button>
+    <button class="btn" id="btn-stop"  onclick="ntpStop()"  disabled>■ STOP</button>
+    <div class="sep"></div>
+    <button class="btn" onclick="toggleServers()">⊞ servers</button>
+    <button class="btn" onclick="clearLog()">✕ clear log</button>
+    <button class="btn btn-danger" onclick="showClear()">🗑 clear DB</button>
+  </div>
+
+  <div class="footer">ntp_sampler.py · random.org · nist.gov · sqlite · sse · flask · docker</div>
+  <div class="toast" id="toast"></div>
+
+  <div class="overlay" id="clear-overlay">
+    <div class="dialog">
+      <p>Delete all records from ntp.db?</p>
+      <div class="dialog-btns">
+        <button class="btn btn-danger" onclick="confirmClear()">clear DB</button>
+        <button class="btn" onclick="document.getElementById('clear-overlay').classList.remove('show')">cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── utils ──────────────────────────────────────────────────────────────────
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3500);
+    }
+    function fmt(n, dec=1) {
+      if (n == null) return '—';
+      if (Math.abs(n) >= 1000) return (n/1000).toFixed(1)+'K';
+      return typeof dec === 'number' ? Number(n).toFixed(dec) : String(n);
+    }
+    function offsetColor(v) {
+      if (v == null) return 'err';
+      const a = Math.abs(v);
+      if (a < 10)  return 'ok';
+      if (a < 100) return 'warn';
+      return 'err';
+    }
+
+    // ── metrics SSE ────────────────────────────────────────────────────────────
+    let mES = null;
+    function connectMetrics() {
+      if (mES) mES.close();
+      mES = new EventSource('/events/metrics');
+      mES.onmessage = ev => {
+        const d = JSON.parse(ev.data);
+        document.getElementById('cpu-val').textContent  = d.cpu + '%';
+        document.getElementById('cpu-bar').style.width  = d.cpu + '%';
+        document.getElementById('ram-val').textContent  = d.mem_used_mb + '/' + d.mem_total_mb + 'MB';
+        document.getElementById('ram-bar').style.width  = d.mem_percent + '%';
+        document.getElementById('disk-val').textContent = d.disk_used_gb + '/' + d.disk_total_gb + 'GB';
+        document.getElementById('disk-bar').style.width = d.disk_percent + '%';
+      };
+    }
+
+    // ── NTP SSE ────────────────────────────────────────────────────────────────
+    let ntpES = null;
+    let _maxInterval = 120;  // updated from ping
+
+    function connectNTP() {
+      if (ntpES) ntpES.close();
+      ntpES = new EventSource('/events/ntp');
+      ntpES.onmessage = ev => {
+        const d = JSON.parse(ev.data);
+
+        // update stats regardless of ping/sample
+        if (d.total    != null) document.getElementById('ntp-total').textContent     = d.total;
+        if (d.db_size_kb != null) document.getElementById('ntp-db').textContent      = d.db_size_kb;
+        if (d.next_in  != null) {
+          const ni = d.next_in;
+          document.getElementById('ntp-next-val').textContent = ni;
+          document.getElementById('ntp-next-bar').style.width =
+            Math.max(0, 100 - (ni / _maxInterval * 100)) + '%';
+        }
+        if (d.servers_count != null)
+          document.getElementById('ntp-servers-count').textContent = d.servers_count;
+        if (d.running != null) updateBadge(d.running);
+
+        if (d.ping) return;   // status-only ping, no new sample to log
+
+        // ── new sample ──
+        _maxInterval = Math.max(_maxInterval, d.next_sec || 120);
+        updateStats(d);
+        appendRow(d);
+      };
+      ntpES.onerror = () => document.getElementById('ntp-dot').classList.add('off');
+    }
+
+    function updateStats(d) {
+      document.getElementById('ntp-offset').textContent  = d.offset_ms != null ? d.offset_ms.toFixed(2) : '—';
+      document.getElementById('ntp-delay').textContent   = d.delay_ms  != null ? d.delay_ms.toFixed(2)  : '—';
+      document.getElementById('ntp-stratum').textContent = d.stratum   != null ? d.stratum              : '—';
+      document.getElementById('ntp-server').textContent  = d.server    || '—';
+      document.getElementById('ntp-rand').textContent    = 'rnd#' + (d.rand_idx ?? '—');
+
+      const errEl = document.getElementById('ntp-err');
+      if (!d.ok && d.error) {
+        errEl.textContent = d.error; errEl.style.display = 'inline';
+      } else {
+        errEl.style.display = 'none';
+      }
+
+      // color offset stat card value
+      const oc = offsetColor(d.offset_ms);
+      const ov = document.getElementById('ntp-offset');
+      ov.className = 'val ' + oc;
+    }
+
+    function updateBadge(running) {
+      const dot   = document.getElementById('ntp-dot');
+      const badge = document.getElementById('ntp-badge');
+      if (running) {
+        badge.className = 'badge badge-run'; badge.textContent = 'running';
+        dot.classList.remove('off');
+      } else {
+        badge.className = 'badge badge-stop'; badge.textContent = 'stopped';
+        dot.classList.add('off');
+      }
+    }
+
+    function appendRow(d) {
+      const row = document.createElement('div');
+      row.className = 'log-entry ntp';
+
+      const oc  = offsetColor(d.offset_ms);
+      const off = d.offset_ms != null ? `<span class="${oc}">${d.offset_ms.toFixed(2)}</span>` : '<span class="err">—</span>';
+      const del = d.delay_ms  != null ? `<span class="c3">${d.delay_ms.toFixed(2)}</span>`     : '<span class="err">—</span>';
+      const str = d.stratum   != null ? `<span class="c3">${d.stratum}</span>`                  : '<span class="err">—</span>';
+      const ok  = d.ok ? '' : ' title="' + (d.error||'') + '"';
+
+      row.innerHTML =
+        `<span class="c3">${d.ts_fmt}</span>` +
+        `<span class="c2"${ok}>${d.ok ? '' : '⚠ '}${d.server}</span>` +
+        off + del + str +
+        `<span class="c0">${d.rand_idx ?? '—'}</span>` +
+        `<span class="c3">${d.next_sec ?? '—'}</span>`;
+
+      const log = document.getElementById('ntp-log');
+      log.appendChild(row);
+      // keep last 200 rows
+      while (log.children.length > 200) log.removeChild(log.firstChild);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // ── log toggle ─────────────────────────────────────────────────────────────
+    let _logOpen = true;
+    function toggleLog() {
+      _logOpen = !_logOpen;
+      document.getElementById('ntp-log').classList.toggle('collapsed', !_logOpen);
+      document.getElementById('ntp-burger').textContent = _logOpen ? '✕' : '≡';
+    }
+    function clearLog() { document.getElementById('ntp-log').innerHTML = ''; }
+
+    // ── servers panel ──────────────────────────────────────────────────────────
+    let _srvOpen = false;
+    function toggleServers() {
+      _srvOpen = !_srvOpen;
+      document.getElementById('srv-panel').classList.toggle('open', _srvOpen);
+      if (_srvOpen) loadServers();
+    }
+    function loadServers() {
+      fetch('/ntp/servers').then(r => r.json()).then(d => {
+        const list = document.getElementById('srv-list');
+        const last = document.getElementById('ntp-server').textContent;
+        list.innerHTML = d.servers.map(s =>
+          `<span class="srv-chip${s === last ? ' active' : ''}">${s}</span>`
+        ).join('');
+      });
+    }
+
+    // ── NTP controls ───────────────────────────────────────────────────────────
+    function ntpStart() {
+      fetch('/ntp/start').then(() => {
+        document.getElementById('btn-start').disabled = true;
+        document.getElementById('btn-stop').disabled  = false;
+        updateBadge(true);
+        toast('▶ NTP sampler started');
+        // load recent samples from DB on start
+        fetch('/ntp/recent?n=50').then(r => r.json()).then(data => {
+          data.samples.reverse().forEach(s => appendRow(s));
+        });
+      });
+    }
+    function ntpStop() {
+      fetch('/ntp/stop').then(() => {
+        document.getElementById('btn-start').disabled = false;
+        document.getElementById('btn-stop').disabled  = true;
+        updateBadge(false);
+        toast('■ NTP sampler stopped');
+      });
+    }
+
+    // ── DB clear ───────────────────────────────────────────────────────────────
+    function showClear()    { document.getElementById('clear-overlay').classList.add('show'); }
+    function confirmClear() {
+      document.getElementById('clear-overlay').classList.remove('show');
+      fetch('/ntp/db/clear', { method: 'POST' }).then(() => {
+        clearLog();
+        document.getElementById('ntp-total').textContent  = '0';
+        document.getElementById('ntp-offset').textContent = '—';
+        document.getElementById('ntp-delay').textContent  = '—';
+        document.getElementById('ntp-stratum').textContent= '—';
+        document.getElementById('ntp-db').textContent     = '—';
+        toast('✓ DB cleared');
+      });
+    }
+
+    // ── init ───────────────────────────────────────────────────────────────────
+    connectMetrics();
+    connectNTP();
+
+    // poll status every 5 s for next_in counter update
+    function pollStatus() {
+      fetch('/ntp/status').then(r => r.json()).then(d => {
+        document.getElementById('ntp-total').textContent       = d.total;
+        document.getElementById('ntp-db').textContent          = d.db_size_kb;
+        document.getElementById('ntp-servers-count').textContent = d.servers_count;
+        document.getElementById('ntp-next-val').textContent    = d.next_in;
+        document.getElementById('ntp-next-bar').style.width    =
+          Math.max(0, 100 - (d.next_in / _maxInterval * 100)) + '%';
+        updateBadge(d.running);
+        document.getElementById('btn-start').disabled = d.running;
+        document.getElementById('btn-stop').disabled  = !d.running;
+        if (d.last) updateStats(d.last);
+      }).catch(() => {});
+      setTimeout(pollStatus, 5000);
+    }
+    pollStatus();
+  </script>
+</body>
+</html>
