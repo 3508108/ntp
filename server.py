@@ -92,7 +92,21 @@ def ntp_deploys():
     return {"deploys": sampler.deploys_recent(n)}
 
 
-# ── SSE streams ────────────────────────────────────────────────────────────────
+@app.route("/ntp/server-time")
+def server_time():
+    """Returns current server UTC time + Unix timestamp."""
+    from datetime import datetime, timezone
+    now    = datetime.now(timezone.utc)
+    ts     = time.time()
+    return {
+        "utc":     now.strftime("%Y-%m-%d %H:%M:%S"),
+        "ts":      ts,
+        "iso":     now.isoformat(),
+        "fetched": now.strftime("%H:%M:%S UTC"),
+    }
+
+
+# ── SSE streams ───────────────────────────────────────────────────────────────────
 
 @app.route("/events/ntp")
 def events_ntp():

@@ -14,6 +14,16 @@
     .utc-clock { font-size:0.78rem; color:#c8c8d4; letter-spacing:2px; font-variant-numeric:tabular-nums; }
     .utc-label { font-size:0.58rem; color:#5a5a70; letter-spacing:3px; text-transform:uppercase; margin-right:6px; }
 
+    /* server time block */
+    .srv-time-bar { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px; }
+    .srv-time-card { background:#16161e; border:1px solid #24242e; border-radius:7px; padding:9px 14px; }
+    .srv-time-card .lbl { font-size:0.58rem; color:#5a5a70; text-transform:uppercase; letter-spacing:2px; margin-bottom:5px; }
+    .srv-time-val { font-size:0.9rem; color:#c8c8d4; font-variant-numeric:tabular-nums; letter-spacing:1px; }
+    .srv-delta-ok  { color:#6fcf97; }
+    .srv-delta-warn{ color:#c9a84c; }
+    .srv-delta-err { color:#eb5757; }
+    .srv-refresh-hint { font-size:0.58rem; color:#404055; margin-top:3px; }
+
     /* sys bar */
     .sys-bar { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px; }
     .sys-card { background:#16161e; border:1px solid #24242e; border-radius:7px; padding:9px 12px; }
@@ -129,6 +139,25 @@
       <span class="utc-label">UTC</span><span class="utc-clock" id="utc-clock">—</span>
     </span>
     <span class="meta" id="h-ip">104.248.21.29 · port 8080</span>
+  </div>
+
+  <!-- server time block (polls every 10 min) -->
+  <div class="srv-time-bar">
+    <div class="srv-time-card">
+      <div class="lbl">server time · UTC</div>
+      <div class="srv-time-val" id="srv-utc">—</div>
+      <div class="srv-refresh-hint" id="srv-fetched"></div>
+    </div>
+    <div class="srv-time-card">
+      <div class="lbl">client ↔ server дельта</div>
+      <div class="srv-time-val" id="srv-delta">—</div>
+      <div class="srv-refresh-hint">client − server</div>
+    </div>
+    <div class="srv-time-card">
+      <div class="lbl">next оновлення</div>
+      <div class="srv-time-val" id="srv-next">—</div>
+      <div class="srv-refresh-hint">10 хв цикл</div>
+    </div>
   </div>
 
   <!-- system metrics -->
@@ -531,6 +560,44 @@
         toast('✓ DB cleared');
       });
     }
+
+    // ── server time (every 10 min) ────────────────────────────────────────
+    const SRV_INTERVAL = 600;  // seconds
+    let _srvNextIn = SRV_INTERVAL;
+
+    function fetchServerTime() {
+      const t0 = Date.now();
+      fetch('/ntp/server-time').then(r => r.json()).then(d => {
+        const rtt      = Date.now() - t0;          // round-trip ms
+        const srvMs    = d.ts * 1000 + rtt / 2;   // corrected server time
+        const deltaMs  = Math.round(Date.now() - srvMs);
+        const absDelta = Math.abs(deltaMs);
+
+        document.getElementById('srv-utc').textContent   = d.utc;
+        document.getElementById('srv-fetched').textContent = 'fetched ' + d.fetched + ' (rtt ' + rtt + 'ms)';
+
+        const sign  = deltaMs >= 0 ? '+' : '−';
+        const cls   = absDelta < 200 ? 'srv-delta-ok' : absDelta < 1000 ? 'srv-delta-warn' : 'srv-delta-err';
+        const delEl = document.getElementById('srv-delta');
+        delEl.textContent = sign + absDelta + 'ms';
+        delEl.className   = 'srv-time-val ' + cls;
+
+        _srvNextIn = SRV_INTERVAL;
+      }).catch(() => {
+        document.getElementById('srv-utc').textContent = '— error';
+      });
+    }
+
+    // countdown for next fetch
+    setInterval(() => {
+      _srvNextIn = Math.max(0, _srvNextIn - 1);
+      const m = Math.floor(_srvNextIn / 60);
+      const s = String(_srvNextIn % 60).padStart(2, '0');
+      document.getElementById('srv-next').textContent = m + ':' + s;
+      if (_srvNextIn === 0) fetchServerTime();
+    }, 1000);
+
+    fetchServerTime();   // initial fetch on load
 
     // ── UTC clock ──────────────────────────────────────────────────────────────
     function tickClock() {
