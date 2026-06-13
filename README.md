@@ -4,6 +4,17 @@ Continuous NTP monitoring service — samples NIST, Cloudflare, Google, and pool
 
 **Live:** http://144.126.244.103:8080
 
+### Current Status *(as of 2026-06-13)*
+
+| Metric | Value |
+|---|---|
+| Samples collected | 935+ |
+| Server pool | 28 active servers |
+| DB size | ~304 KB |
+| Monitoring since | 13 Jun 03:17 UTC |
+| Last deploy | 13 Jun 03:06 UTC — `7138e4f` — 3899ms |
+| Service | ✅ active (gunicorn + systemd) |
+
 ---
 
 ## Architecture
@@ -25,9 +36,10 @@ local PRNG ──► (fallback)          ┘       │
 | File | Role |
 |---|---|
 | `ntp_sampler.py` | Core: server pool, quantum RNG, NTP queries, SQLite, heartbeat, downtime detection |
-| `server.py` | Flask app: REST endpoints, SSE streams, SIGTERM handler |
-| `dashboard.html` | Single-page dashboard: live stats, logs, deploy/downtime panels |
+| `server.py` | Flask app: REST endpoints, SSE streams, SIGTERM handler, password auth, DB export |
+| `dashboard.html` | Single-page dashboard: live stats, logs, deploy/downtime panels, auth modal |
 | `Makefile` | Developer operations: deploy, logs, status, db, ssh |
+| `AGENTS.md` | Project rules: dashboard link rule, credential management, deployment info |
 
 ### Database (`/var/lib/ntp/ntp.db`)
 
@@ -207,30 +219,46 @@ Global `.env`: `~/Documents/coding/.env` · Shell: `$CODING_ENV`
 
 | Panel | Endpoint | Refresh |
 |---|---|---|
-| Server time · UTC | `GET /ntp/server-time` | Manual button |
+| Server time · UTC | `GET /ntp/server-time` | Manual ↻ button |
 | CPU / RAM / Disk | SSE `/events/metrics` | 500ms |
-| NTP stats (offset, delay, stratum) | SSE `/events/ntp` | Per sample |
+| NTP stats (last offset, **avg offset**, delay, stratum) | SSE `/events/ntp` | Per sample |
 | Countdown to next sample | SSE ping | 3s |
-| NTP sample log | SSE + `/ntp/recent` | Real-time |
+| NTP sample log (with **pool source badge**: NIST/CF/GGL/POOL) | SSE + `/ntp/recent` | Real-time |
 | Uptime stats | `GET /ntp/uptime-stats` | 30s |
 | Downtime log | `GET /ntp/downtime` | 30s |
 | Deploy log | `GET /ntp/deploys` | 30s |
+
+### Protected actions (password required)
+
+Buttons `⊞ servers` and `↓ export db` require the dashboard password.
+Buttons `✕ clear log` and `🗑 clear DB` are **disabled**.
+
+Auth is verified server-side via SHA-256 at `POST /auth/verify`.
+The session is cached in memory for the current browser tab — no cookies or localStorage.
 
 ---
 
 ## API Reference
 
 ```
-GET  /ntp/status          sampler status (running, total, next_in)
-GET  /ntp/recent?n=50     last N samples
-GET  /ntp/servers         current server pool list
-GET  /ntp/downtime?n=20   recent downtime events
-GET  /ntp/uptime-stats    uptime %, incidents, last event
-GET  /ntp/deploys?n=20    recent deploy events
-GET  /ntp/server-time     current server UTC time + timestamp
-POST /ntp/deploy          record a deploy event {duration_ms, git_hash, message}
-POST /ntp/db/clear        clear ntp_samples (heartbeat/downtime preserved)
+# Public
+GET  /ntp/status              sampler status (running, total, next_in)
+GET  /ntp/recent?n=50         last N samples
+GET  /ntp/servers             current server pool list
+GET  /ntp/downtime?n=20       recent downtime events
+GET  /ntp/uptime-stats        uptime %, incidents, last event
+GET  /ntp/deploys?n=20        recent deploy events
+GET  /ntp/server-time         current server UTC time + timestamp
 
-GET  /events/ntp          SSE: new samples + status pings
-GET  /events/metrics      SSE: CPU/RAM/disk every 500ms
+# SSE streams
+GET  /events/ntp              SSE: new samples + status pings every 3s
+GET  /events/metrics          SSE: CPU/RAM/disk every 500ms
+
+# Auth
+POST /auth/verify             verify password → {ok: bool}
+
+# Protected (require password)
+GET  /ntp/db/export?password= consistent SQLite backup → ntp_YYYYMMDD.db.gz
+POST /ntp/db/clear            clear ntp_samples {password} (heartbeat/downtime preserved)
+POST /ntp/deploy              record deploy event {duration_ms, git_hash, message}
 ```
