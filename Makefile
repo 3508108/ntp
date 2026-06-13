@@ -56,8 +56,8 @@ restart:
 # ── docker: build ─────────────────────────────────────────────────────────────
 .PHONY: docker-build
 docker-build:
-	@echo "→ building $(IMAGE)..."
-	docker build -t $(IMAGE):latest .
+	@echo "→ building $(IMAGE) (linux/amd64)..."
+	docker build --platform linux/amd64 -t $(IMAGE):latest .
 	@echo "✓ build complete"
 	@docker images $(IMAGE)
 
@@ -79,15 +79,17 @@ docker-logs:
 
 # ── docker: deploy to droplet (build → stream via SSH → restart) ──────────────
 # Does NOT require a registry — streams image directly over SSH.
+# Stops systemd service and old container before starting new one.
 .PHONY: docker-deploy
 docker-deploy:
-	@echo "→ building image..."
-	@docker build -t $(IMAGE):latest .
-	@echo "→ streaming image to $(HOST) (may take ~20s)..."
-	@T0=$$(date +%s%3N); \
+	@echo "→ building image (linux/amd64)..."
+	@docker build --platform linux/amd64 -t $(IMAGE):latest .
+	@echo "→ streaming image to $(HOST) (may take ~30s)..."
+	@T0=$$(date +%s); \
 	 docker save $(IMAGE):latest | gzip | \
-	 ssh $(HOST) '\
-	   gunzip | docker load && \
+	 ssh $(HOST) 'set -e; \
+	   gunzip | docker load; \
+	   systemctl stop $(SERVICE) 2>/dev/null || true; \
 	   docker stop $(CONTAINER) 2>/dev/null || true; \
 	   docker rm   $(CONTAINER) 2>/dev/null || true; \
 	   docker run -d \
@@ -96,12 +98,13 @@ docker-deploy:
 	     -p 8080:8080 \
 	     -v ntp_data:/var/lib/ntp \
 	     -e NTP_DB=/var/lib/ntp/ntp.db \
-	     $(IMAGE):latest'; \
-	 DUR=$$(( $$(date +%s%3N) - T0 )); \
+	     $(IMAGE):latest; \
+	   echo "✓ container started"'; \
+	 DUR=$$(( ($$(date +%s) - $$T0) * 1000 )); \
 	 HASH=$$(git rev-parse --short HEAD); \
 	 MSG=$$(git log -1 --pretty=%s | cut -c1-80); \
-	 sleep 2; \
-	 curl -sf -X POST http://$(HOST):8080/ntp/deploy \
+	 sleep 3; \
+	 curl -sf -X POST http://144.126.244.103:8080/ntp/deploy \
 	   -H 'Content-Type: application/json' \
 	   -d "{\"duration_ms\":$$DUR,\"git_hash\":\"$$HASH\",\"message\":\"$$MSG (docker)\"}" \
 	   > /dev/null || true; \
