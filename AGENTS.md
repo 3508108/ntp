@@ -1,4 +1,13 @@
-# Project Rules — ntp-droplet
+# Project Rules — ntp
+
+## Dashboard link rule
+
+> **ALWAYS** include a link to the live dashboard after any deploy, code change, or update.
+
+After every `make deploy`, file change, or any action that modifies the running service,
+include this line in the response:
+
+**Dashboard:** http://144.126.244.103:8080
 
 ## Credential management
 
@@ -9,26 +18,31 @@ Credentials used by this project, all stored in 1Password (Personal vault):
 
 | Variable | 1Password item | Notes |
 |---|---|---|
-| `NTP_DROPLET_HOST` | `ntp-droplet (64.226.102.81)` (uxxanuajptep2nrgna5zjvviba) | Server IP — not a secret |
+| `DROPLET_HOST` | `144.126.244.103` (Reserved IP) | Stable public endpoint |
+| `DIGITAL_OCEAN_GR_DROPLET_ROOT` | `gr-droplet-root` (Login) | Root password |
 | `github` / `github_classic` | `GitHub Personal Access Token`, `GitHub Classic PAT` | GitHub PATs for CI/CD |
-| `vultr` | `Vultr API Token` (u6pb6qprdcap3rozagiz6gmi7q) | Vultr API — server provisioning |
+| `digitalocean` | DigitalOcean API token | Droplet management |
+| SSH private key | `SSH Key — GR Droplet` | `~/.ssh/id_rsa_gr_droplet` |
 
 Rotation checklist:
 1. Update value in 1Password
 2. Update `~/Documents/coding/.env`
 3. Update GitHub Secret via repo Settings → Secrets
 
-Never commit `.env` or any raw credential to git.
-`.gitignore` already covers: `.env`.
+Never commit `.env` or `.pat` or any raw credential to git.
+`.gitignore` covers: `.env`, `.pat`, `*.db`, `*.pyc`.
 
 ## Security
 
-- SSH access: root@64.226.102.81 via 1Password SSH agent (`~/.ssh/config` → `Host ntp-droplet`).
+- SSH access: `ssh gr-droplet` via 1Password SSH agent (`~/.ssh/config` → `Host gr-droplet`).
 - No passphrase-less keys on disk — all keys managed by 1Password agent.
+- UFW active: only ports 22 and 8080 open.
+- Dashboard auth: password-protected actions (`/auth/verify`, SHA-256).
 - Secrets in git remotes: rotate the PAT if it appears in git history.
 
 ## Deployment
 
-- Build: `docker build` via `Makefile`
-- Deploy: `make deploy` or via GitHub Actions
-- Server: `64.226.102.81` (`Host ntp-droplet` in SSH config)
+- Deploy: `make deploy` (zero-downtime via gunicorn graceful reload)
+- Server: `104.248.21.29` direct IP, `144.126.244.103` Reserved IP (`Host gr-droplet` in SSH config)
+- Code: `/opt/ntp/` · Data: `/var/lib/ntp/ntp.db`
+- Service: `systemctl status ntp-dashboard`
