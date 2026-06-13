@@ -3,7 +3,13 @@ NTP Dashboard server — Flask + SSE.
 Usage: python3 server.py
 Open:  http://localhost:8080
 """
+import gzip
+import hashlib
 import json
+import os
+import shutil
+import sqlite3
+import tempfile
 import time
 import queue
 import signal
@@ -33,7 +39,22 @@ signal.signal(signal.SIGTERM, _graceful_shutdown)
 signal.signal(signal.SIGINT,  _graceful_shutdown)
 
 
-# ── pages ──────────────────────────────────────────────────────────────────────
+_PWD_HASH = "acfb20a373bc35f4f6dde55ec29f7f91fd3078ad5192ff1e1b9a02326a4bcc1c"
+
+
+def _auth_ok(password: str) -> bool:
+    return hashlib.sha256(password.encode()).hexdigest() == _PWD_HASH
+
+
+# ── auth ───────────────────────────────────────────────────────────────────
+
+@app.route("/auth/verify", methods=["POST"])
+def auth_verify():
+    data = request.get_json(force=True, silent=True) or {}
+    return {"ok": _auth_ok(data.get("password", ""))}
+
+
+# ── pages ───────────────────────────────────────────────────────────────────
 
 @app.route("/")
 def index():
@@ -72,8 +93,44 @@ def ntp_servers():
 
 @app.route("/ntp/db/clear", methods=["POST"])
 def ntp_db_clear():
+    data = request.get_json(force=True, silent=True) or {}
+    if not _auth_ok(data.get("password", "")):
+        return {"error": "unauthorized"}, 401
     sampler.db_clear()
     return {"status": "cleared"}
+
+
+@app.route("/ntp/db/export")
+def ntp_db_export():
+    """Consistent SQLite backup → gzip download. Requires password query param."""
+    if not _auth_ok(request.args.get("password", "")):
+        return {"error": "unauthorized"}, 401
+    from datetime import datetime, timezone
+    tmp_db = tempfile.mktemp(suffix=".db")
+    tmp_gz = tmp_db + ".gz"
+    try:
+        src = sqlite3.connect(sampler._db_path)
+        dst = sqlite3.connect(tmp_db)
+        src.backup(dst)
+        src.close()
+        dst.close()
+        with open(tmp_db, "rb") as fi, gzip.open(tmp_gz, "wb") as fo:
+            shutil.copyfileobj(fi, fo)
+        os.unlink(tmp_db)
+        fname = f"ntp_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.db.gz"
+        from flask import after_this_request
+        @after_this_request
+        def _rm(resp):
+            try: os.unlink(tmp_gz)
+            except Exception: pass
+            return resp
+        return send_file(tmp_gz, as_attachment=True, download_name=fname,
+                         mimetype="application/gzip")
+    except Exception as e:
+        for p in (tmp_db, tmp_gz):
+            try: os.unlink(p)
+            except: pass
+        return {"error": str(e)}, 500
 
 
 @app.route("/ntp/downtime")

@@ -51,11 +51,11 @@
     .log-header .burger { background:none; border:none; color:#555568; cursor:pointer; font-size:0.9rem; padding:0 0 0 8px; line-height:1; transition:color 0.15s; }
     .log-header .burger:hover { color:#aaaabc; }
     .log-cols { display:grid; font-size:0.58rem; color:#404055; padding:4px 12px 2px; letter-spacing:1px; border-bottom:1px solid #1a1a24; }
-    .log-cols.ntp { grid-template-columns:60px 1fr 76px 72px 52px 42px 54px 64px; }
+    .log-cols.ntp { grid-template-columns:60px 1fr 76px 72px 52px 42px 54px 64px 42px; }
     .log-body { overflow-y:auto; max-height:300px; }
     .log-body.collapsed { display:none; }
     .log-entry { display:grid; font-size:0.7rem; padding:3px 12px; border-bottom:1px solid #18181f; }
-    .log-entry.ntp { grid-template-columns:60px 1fr 76px 72px 52px 42px 54px 64px; }
+    .log-entry.ntp { grid-template-columns:60px 1fr 76px 72px 52px 42px 54px 64px 42px; }
     .log-entry:hover { background:#1a1a24; }
 
     /* color helpers */
@@ -103,6 +103,19 @@
     .log-entry.dep { grid-template-columns:52px 62px 68px 60px 1fr; }
     .dep-hash { color:#4ec9b0; font-size:0.68rem; font-family:'Courier New',monospace; }
     .dep-dur  { color:#9cdcfe; }
+
+    /* server source badges */
+    .src-nist { color:#c9a84c; font-size:0.58rem; border:1px solid #c9a84c33; border-radius:3px; padding:0 4px; }
+    .src-cf   { color:#f38020; font-size:0.58rem; border:1px solid #f3802033; border-radius:3px; padding:0 4px; }
+    .src-ggl  { color:#4285f4; font-size:0.58rem; border:1px solid #4285f433; border-radius:3px; padding:0 4px; }
+    .src-pool { color:#6fcf97; font-size:0.58rem; border:1px solid #6fcf9733; border-radius:3px; padding:0 4px; }
+
+    /* auth modal input */
+    .auth-input { background:#0e0e12; border:1px solid #2a2a38; color:#c8c8d4;
+      font-family:'Courier New',monospace; font-size:0.85rem; padding:8px 12px;
+      border-radius:5px; outline:none; width:100%; margin-bottom:14px; text-align:center;
+      letter-spacing:3px; }
+    .auth-input:focus { border-color:#c9a84c55; }
 
     /* servers list panel */
     .srv-panel { background:#12121a; border:1px solid #1e1e28; border-radius:7px; margin-bottom:10px; display:none; }
@@ -179,6 +192,7 @@
   <div class="stats-row">
     <div class="stat"><div class="lbl">samples</div><div class="val" id="ntp-total">—</div><div class="unit">all time</div></div>
     <div class="stat"><div class="lbl">last offset</div><div class="val" id="ntp-offset">—</div><div class="unit">ms</div></div>
+    <div class="stat"><div class="lbl">avg offset</div><div class="val" id="ntp-avg">—</div><div class="unit">last 50</div></div>
     <div class="stat"><div class="lbl">last delay</div><div class="val" id="ntp-delay">—</div><div class="unit">ms</div></div>
     <div class="stat"><div class="lbl">stratum</div><div class="val" id="ntp-stratum">—</div><div class="unit">level</div></div>
     <div class="stat"><div class="lbl">DB size</div><div class="val" id="ntp-db">—</div><div class="unit">KB</div></div>
@@ -234,7 +248,7 @@
       </span>
     </div>
     <div class="log-cols ntp" id="ntp-cols">
-      <span>time</span><span>server</span><span>offset ms</span><span>delay ms</span><span>stratum</span><span>rnd#</span><span>next s</span><span>source</span>
+      <span>time</span><span>server</span><span>offset ms</span><span>delay ms</span><span>stratum</span><span>rnd#</span><span>next s</span><span>source</span><span>pool</span>
     </div>
     <div class="log-body" id="ntp-log"></div>
   </div>
@@ -276,9 +290,10 @@
   <div class="controls">
     <span class="btn" style="color:#6fcf97;border-color:#6fcf9730;cursor:default"><span class="dot" style="margin-right:5px"></span>always running</span>
     <div class="sep"></div>
-    <button class="btn" onclick="toggleServers()">⊞ servers</button>
-    <button class="btn" onclick="clearLog()">✕ clear log</button>
-    <button class="btn btn-danger" onclick="showClear()">🗑 clear DB</button>
+    <button class="btn" onclick="requireAuth(toggleServers)">⊞ servers</button>
+    <button class="btn" onclick="requireAuth(clearLog)">✕ clear log</button>
+    <button class="btn" onclick="requireAuth(exportDb)">↓ export db</button>
+    <button class="btn btn-danger" onclick="requireAuth(showClear)">🗑 clear DB</button>
   </div>
 
   <div class="footer">ntp_sampler.py · random.org · nist.gov · sqlite · sse · flask · docker</div>
@@ -294,8 +309,58 @@
     </div>
   </div>
 
+  <!-- auth modal -->
+  <div class="overlay" id="auth-overlay">
+    <div class="dialog">
+      <p style="margin-bottom:10px">Password</p>
+      <input class="auth-input" type="password" id="auth-input"
+        placeholder="••••••••"
+        onkeydown="if(event.key==='Enter')submitAuth(); if(event.key==='Escape')cancelAuth()">
+      <div class="dialog-btns">
+        <button class="btn" onclick="submitAuth()" style="color:#c9a84c;border-color:#c9a84c44">confirm</button>
+        <button class="btn" onclick="cancelAuth()">cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    // ── utils ──────────────────────────────────────────────────────────────────
+    // ── auth ────────────────────────────────────────────────────────────────
+    let _authPending = null;
+    let _authToken   = null;  // raw password in memory only (not persisted)
+
+    function requireAuth(cb) {
+      if (sessionStorage.getItem('ntp_auth') === '1' && _authToken) { cb(); return; }
+      _authPending = cb;
+      document.getElementById('auth-overlay').classList.add('show');
+      setTimeout(() => document.getElementById('auth-input').focus(), 80);
+    }
+
+    async function submitAuth() {
+      const pwd = document.getElementById('auth-input').value;
+      document.getElementById('auth-input').value = '';
+      const r = await fetch('/auth/verify', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({password: pwd})
+      });
+      const d = await r.json();
+      document.getElementById('auth-overlay').classList.remove('show');
+      if (d.ok) {
+        _authToken = pwd;                        // keep in memory for API calls
+        sessionStorage.setItem('ntp_auth', '1'); // flag for UX only
+        if (_authPending) { const cb = _authPending; _authPending = null; cb(); }
+      } else {
+        toast('✗ wrong password');
+      }
+    }
+
+    function cancelAuth() {
+      _authPending = null;
+      document.getElementById('auth-input').value = '';
+      document.getElementById('auth-overlay').classList.remove('show');
+    }
+
+    // ── utils ──────────────────────────────────────────────────────────────
     function toast(msg) {
       const t = document.getElementById('toast');
       t.textContent = msg; t.classList.add('show');
@@ -405,15 +470,34 @@
       const str = d.stratum   != null ? `<span class="c3">${d.stratum}</span>`                  : '<span class="err">—</span>';
       const ok  = d.ok ? '' : ' title="' + (d.error||'') + '"';
 
-      const srcClass = d.rand_src === 'qrandom' ? 'src-q' : d.rand_src === 'random.org' ? 'src-ro' : 'src-lc';
+    const srcClass = d.rand_src === 'qrandom' ? 'src-q' : d.rand_src === 'random.org' ? 'src-ro' : 'src-lc';
       const srcLabel  = d.rand_src === 'qrandom' ? '⊛ quantum' : d.rand_src === 'random.org' ? '~ atm' : '· local';
+      const pool = d.server.includes('nist.gov')      ? '<span class="src-nist">NIST</span>'
+                 : d.server.includes('cloudflare.com') ? '<span class="src-cf">CF</span>'
+                 : d.server.includes('google.com')     ? '<span class="src-ggl">GGL</span>'
+                 : d.server.includes('pool.ntp.org')   ? '<span class="src-pool">POOL</span>'
+                 : '<span class="c3">—</span>';
       row.innerHTML =
         `<span class="c3">${d.ts_fmt}</span>` +
         `<span class="c2"${ok}>${d.ok ? '' : '⚠ '}${d.server}</span>` +
         off + del + str +
         `<span class="c0">${d.rand_idx ?? '—'}</span>` +
         `<span class="c3">${d.next_sec ?? '—'}</span>` +
-        `<span class="${srcClass}">${srcLabel}</span>`;
+        `<span class="${srcClass}">${srcLabel}</span>` +
+        pool;
+
+      // update running avg offset
+      const rows = [...document.getElementById('ntp-log').querySelectorAll('.log-entry.ntp')];
+      const offsets = rows.slice(-50).map(r => {
+        const v = parseFloat(r.children[2]?.textContent);
+        return isNaN(v) ? null : v;
+      }).filter(v => v !== null);
+      if (offsets.length) {
+        const avg = offsets.reduce((a,b)=>a+b,0)/offsets.length;
+        const avgEl = document.getElementById('ntp-avg');
+        avgEl.textContent = avg.toFixed(2);
+        avgEl.className = 'val ' + offsetColor(avg);
+      }
 
       const log = document.getElementById('ntp-log');
       log.appendChild(row);
@@ -547,9 +631,21 @@
 
     // ── DB clear ───────────────────────────────────────────────────────────────
     function showClear()    { document.getElementById('clear-overlay').classList.add('show'); }
+    function exportDb() {
+      if (!_authToken) { toast('✗ not authenticated'); return; }
+      const a = document.createElement('a');
+      a.href = '/ntp/db/export?password=' + encodeURIComponent(_authToken);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast('↓ downloading…');
+    }
+
     function confirmClear() {
       document.getElementById('clear-overlay').classList.remove('show');
-      fetch('/ntp/db/clear', { method: 'POST' }).then(() => {
+      fetch('/ntp/db/clear', { method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({password: _authToken || ''}) }).then(() => {
         clearLog();
         document.getElementById('ntp-total').textContent  = '0';
         document.getElementById('ntp-offset').textContent = '—';
