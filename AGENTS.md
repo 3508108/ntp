@@ -42,7 +42,13 @@ Never commit `.env` or `.pat` or any raw credential to git.
 
 ## Deployment
 
-- Deploy: `make deploy` (zero-downtime via gunicorn graceful reload)
+> **GLOBAL RULE: ALWAYS use `make docker-deploy` as the primary deploy method.**
+> Never use `make deploy` (systemd/git-pull) unless Docker is unavailable.
+
+- **Deploy:** `make docker-deploy` — builds `linux/amd64` image locally, streams via SSH, restarts container
+- **Local run:** `make docker-run` — runs at http://localhost:8080
+- **Logs:** `make docker-logs` (local) · `make logs` (remote journalctl)
+- **Health:** `make docker-health` — container status + `/ntp/status`
 - Server: `104.248.21.29` direct IP, `144.126.244.103` Reserved IP (`Host gr-droplet` in SSH config)
-- Code: `/opt/ntp/` · Data: `/var/lib/ntp/ntp.db`
-- Service: `systemctl status ntp-dashboard`
+- Container: `ntp-dashboard` · Volume: `ntp_data:/var/lib/ntp` · Port: `8080`
+- Data: `/var/lib/ntp/ntp.db` (persisted in Docker named volume, survives redeploys)
