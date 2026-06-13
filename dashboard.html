@@ -291,9 +291,9 @@
     <span class="btn" style="color:#6fcf97;border-color:#6fcf9730;cursor:default"><span class="dot" style="margin-right:5px"></span>always running</span>
     <div class="sep"></div>
     <button class="btn" onclick="requireAuth(toggleServers)">⊞ servers</button>
-    <button class="btn" onclick="requireAuth(clearLog)">✕ clear log</button>
     <button class="btn" onclick="requireAuth(exportDb)">↓ export db</button>
-    <button class="btn btn-danger" onclick="requireAuth(showClear)">🗑 clear DB</button>
+    <button class="btn" disabled title="disabled">✕ clear log</button>
+    <button class="btn btn-danger" disabled title="disabled">🗑 clear DB</button>
   </div>
 
   <div class="footer">ntp_sampler.py · random.org · nist.gov · sqlite · sse · flask · docker</div>
