@@ -3,3 +3,8 @@
 __pycache__/
 *.db
 *.pyc
+info.txt
+info.csv
+info.gz
+source.gz
+ntp-release-*.tar.gz
