@@ -44,6 +44,8 @@ Never commit `.env` or `.pat` or any raw credential to git.
 
 > **GLOBAL RULE: ALWAYS use `make docker-deploy` as the primary deploy method.**
 > Never use `make deploy` (systemd/git-pull) unless Docker is unavailable.
+> **GLOBAL RULE: NEVER auto-deploy after confirmation.**
+> Deploy must run only after an explicit direct user command.
 
 - **Deploy:** `make docker-deploy` — builds `linux/amd64` image locally, streams via SSH, restarts container
 - **Local run:** `make docker-run` — runs at http://localhost:8080
