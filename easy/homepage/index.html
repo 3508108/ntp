@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>karpenkodima0000.com</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0c0c0c;
+            --surface: #171717;
+            --border: #2a2a2a;
+            --text: #e5e5e5;
+            --text-muted: #525252;
+            --accent: #a3a3a3;
+        }
+
+        body {
+            font-family: 'Academy Engraved LET', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 48px;
+            padding: 20px;
+        }
+
+        .domain {
+            font-size: 11px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .cell {
+            position: relative;
+            width: 72px;
+            height: 72px;
+        }
+
+        .cell-label {
+            position: absolute;
+            top: -18px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 9px;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .field {
+            width: 100%;
+            height: 100%;
+            background: var(--surface);
+            border: 1.5px solid var(--border);
+            color: var(--text);
+            font-size: 28px;
+            font-weight: 300;
+            text-align: center;
+            outline: none;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 2px;
+            font-family: 'Academy Engraved LET', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            caret-color: var(--accent);
+        }
+
+        .field:focus {
+            border-color: var(--accent);
+            background: #1f1f1f;
+        }
+
+        .field.filled {
+            border-color: #404040;
+        }
+
+        .submit-cell {
+            width: 72px;
+            height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .submit-btn {
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            border: 1.5px solid var(--border);
+            color: var(--text-muted);
+            font-size: 22px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 2px;
+            text-decoration: none;
+            user-select: none;
+        }
+
+        .submit-btn:hover {
+            border-color: var(--accent);
+            color: var(--text);
+        }
+
+        .submit-btn:active {
+            transform: scale(0.96);
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-4px); }
+            40% { transform: translateX(4px); }
+            60% { transform: translateX(-4px); }
+            80% { transform: translateX(4px); }
+        }
+
+        .shake {
+            animation: shake 0.4s ease;
+        }
+
+        @media (max-width: 480px) {
+            .cell, .submit-cell {
+                width: 60px;
+                height: 60px;
+            }
+            .field {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="domain">karpenkodima0000.com</div>
+
+        <div class="grid">
+            <div class="cell">
+                <div class="cell-label">5</div>
+                <input type="text" class="field" data-expected="3" maxlength="1" inputmode="numeric">
+            </div>
+            <div class="cell">
+                <div class="cell-label">4</div>
+                <input type="text" class="field" data-expected="5" maxlength="1" inputmode="numeric">
+            </div>
+            <div class="cell">
+                <div class="cell-label">3</div>
+                <input type="text" class="field" data-expected="0" maxlength="1" inputmode="numeric">
+            </div>
+            <div class="cell">
+                <div class="cell-label">6</div>
+                <input type="text" class="field" data-expected="8" maxlength="1" inputmode="numeric">
+            </div>
+            <div class="cell">
+                <div class="cell-label">7</div>
+                <input type="text" class="field" data-expected="1" maxlength="1" inputmode="numeric">
+            </div>
+            <div class="cell">
+                <div class="cell-label">2</div>
+                <input type="text" class="field" data-expected="0" maxlength="1" inputmode="numeric">
+            </div>
+            <div class="cell">
+                <div class="cell-label">1</div>
+                <input type="text" class="field" data-expected="8" maxlength="1" inputmode="numeric">
+            </div>
+            <div class="submit-cell">
+<button type="button" class="submit-btn" id="submit" title="Перевірити">🫆</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fields = Array.from(document.querySelectorAll('.field'));
+        const submitBtn = document.getElementById('submit');
+
+        fields.forEach((field, index) => {
+            field.addEventListener('input', (e) => {
+                const val = e.target.value;
+                if (val.length >= 1) {
+                    field.classList.add('filled');
+                    field.value = val.slice(-1);
+                    if (index < fields.length - 1) {
+                        fields[index + 1].focus();
+                    } else {
+                        submitBtn.focus();
+                    }
+                } else {
+                    field.classList.remove('filled');
+                }
+            });
+
+            field.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace' && field.value === '' && index > 0) {
+                    e.preventDefault();
+                    fields[index - 1].focus();
+                    fields[index - 1].value = '';
+                    fields[index - 1].classList.remove('filled');
+                }
+                if (e.key === 'Enter') {
+                    submitBtn.click();
+                }
+            });
+
+            field.addEventListener('keypress', (e) => {
+                if (!/[0-9]/.test(e.key)) {
+                    e.preventDefault();
+                }
+            });
+        });
+
+        submitBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+
+            let allCorrect = true;
+            fields.forEach(field => {
+                if (field.value !== field.dataset.expected) {
+                    allCorrect = false;
+                }
+            });
+
+            if (allCorrect) {
+                window.location.href = 'http://time.karpenkodima000.com:8080';
+            } else {
+                fields.forEach(field => {
+                    field.classList.add('shake');
+                    field.value = '';
+                    field.classList.remove('filled');
+                    setTimeout(() => {
+                        field.classList.remove('shake');
+                    }, 400);
+                });
+
+                localStorage.clear();
+                sessionStorage.clear();
+
+                document.cookie.split(';').forEach(cookie => {
+                    const [name] = cookie.split('=');
+                    document.cookie = `${name.trim()}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+                });
+
+                fields[0].focus();
+            }
+        });
+    </script>
+</body>
+</html>
