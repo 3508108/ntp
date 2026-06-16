@@ -11,8 +11,7 @@ services:
     environment:
       - NTP_DB=/var/lib/ntp/ntp.db
     healthcheck:
-      test: ["CMD", "python3", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:8080/ntp/status', timeout=4)"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/ntp/status"]
       interval: 15s
       timeout: 5s
       start_period: 10s
