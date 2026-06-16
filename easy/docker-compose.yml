@@ -1,0 +1,21 @@
+services:
+  easy:
+    build: .
+    container_name: easy
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - easy_data:/var/lib/easy
+    environment:
+      - EASY_DB=/var/lib/easy/easy.db
+      - EASY_INTERVAL_MS=500ms
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  easy_data:
+    driver: local

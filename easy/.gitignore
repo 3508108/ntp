@@ -1,0 +1,7 @@
+*.db
+*.db-journal
+easy
+easy.exe
+easy-linux
+*.log
+.DS_Store
