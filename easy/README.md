@@ -44,6 +44,42 @@ ssh easy-droplet 'chmod +x /opt/easy/easy && systemctl restart easy && systemctl
 ## Примітка по доступу
 - Для серверного доступу використовується `root` + RSA-ключ.
 
+## DNS конфігурація та деталі серверів
+Активна DNS-інфраструктура складається з двох recursive DNS-серверів у Frankfurt:
+
+- `fra-dns`
+  - IPv4: `64.226.73.107`
+  - IPv6: `2a03:b0c0:3:f0:0:2:8fa9:e000`
+  - Роль: public recursive resolver
+- `fra-dns-2`
+  - IPv4: `165.227.157.91`
+  - IPv6: `2a03:b0c0:3:f0:0:2:8fbc:f000`
+  - Роль: public recursive resolver (резерв/баланс)
+
+### Налаштування DNS (BIND9)
+- Режим: recursive resolver.
+- `listen-on { any; };`, `listen-on-v6 { any; };`
+- `allow-recursion { any; };`
+- `allow-query-cache { any; };`
+- `allow-query { any; };`
+- Forwarders не використовуються; робота через root hints.
+
+### Мережа та доступ
+- UFW: дозволено `22/tcp`, `53/tcp`, `53/udp` (IPv4 + IPv6).
+- За замовчуванням `deny incoming`.
+- Для адміністрування використовується `root` + RSA.
+
+### Клієнтська DNS-конфігурація (приклад)
+Для macOS клієнта використовуються обидва DNS-сервери:
+- `64.226.73.107`
+- `165.227.157.91`
+
+Перевірка резолюції:
+```bash
+dig @64.226.73.107 cloudflare.com A +short
+dig @165.227.157.91 cloudflare.com A +short
+```
+
 ## Моніторинг і статистика DNS
 Моніторинг налаштований синхронно на двох DNS-серверах:
 - `fra-dns` (`64.226.73.107`, `2a03:b0c0:3:f0:0:2:8fa9:e000`)
