@@ -19,8 +19,8 @@ func main() {
 		dbPath = "easy.db"
 	}
 
-	intervalStr := os.Getenv("EASY_INTERVAL_MS")
-	interval := 500 * time.Millisecond
+	intervalStr := os.Getenv("EASY_INTERVAL")
+	interval := 10 * time.Second
 	if intervalStr != "" {
 		if d, err := time.ParseDuration(intervalStr); err == nil {
 			interval = d
@@ -39,10 +39,10 @@ func main() {
 
 	port := os.Getenv("EASY_PORT")
 	if port == "" {
-		port = "8000"
+		port = "8080"
 	}
 
-	srv := server.New(db)
+	srv := server.New(db, f)
 	go func() {
 		addr := ":" + port
 		log.Printf("listening on %s", addr)

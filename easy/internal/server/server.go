@@ -9,26 +9,34 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"ntp/easy/internal/fetcher"
 	"ntp/easy/internal/store"
 )
 
 type Server struct {
-	db     *store.DB
-	engine *gin.Engine
-	srv    *http.Server
+	db      *store.DB
+	engine  *gin.Engine
+	srv     *http.Server
+	fetcher *fetcher.Fetcher
 }
 
-func New(db *store.DB) *Server {
+type intervalReq struct {
+	Interval string `json:"interval"`
+}
+
+func New(db *store.DB, f *fetcher.Fetcher) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(cors.Default())
 
-	s := &Server{db: db, engine: r}
+	s := &Server{db: db, engine: r, fetcher: f}
 	r.GET("/", s.handleIndex)
 	r.GET("/api/recent", s.handleRecent)
 	r.GET("/api/stream", s.handleStream)
 	r.POST("/0000", s.handle0000)
+	r.GET("/api/interval", s.handleGetInterval)
+	r.POST("/api/interval", s.handleSetInterval)
 	return s
 }
 
@@ -73,8 +81,8 @@ func (s *Server) handleStream(c *gin.Context) {
 		rows, err := s.db.Recent(1)
 		if err == nil && len(rows) > 0 {
 			r := rows[0]
-			fmt.Fprintf(w, "data: {\"probe\":\"%s\",\"date_time\":\"%s\",\"unix_ms\":%d,\"server_ms\":%d,\"cloudflare_ms\":%d,\"ntp_name\":\"%s\"}\n\n",
-				r.Probe, r.DateTime, r.UnixMs, r.ServerMs, r.CloudflareMs, r.NtpName)
+			fmt.Fprintf(w, "data: {\"probe\":\"%s\",\"date_time\":\"%s\",\"unix_ms\":%d,\"server_ms\":%d,\"delta\":%d,\"ntp_name\":\"%s\"}\n\n",
+				r.Probe, r.DateTime, r.UnixMs, r.ServerMs, r.UnixMs-r.ServerMs, r.NtpName)
 			flusher.Flush()
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -99,16 +107,28 @@ func (s *Server) handle0000(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"status":    "ok",
-		"time":      p.Time,
-		"timestamp": p.Timestamp,
-		"device":    p.Device,
-		"action":    p.Action,
-	})
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// indexHTML is embedded to avoid external file dependencies
+func (s *Server) handleGetInterval(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"interval": s.fetcher.Interval().String()})
+}
+
+func (s *Server) handleSetInterval(c *gin.Context) {
+	var req intervalReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	d, err := time.ParseDuration(req.Interval)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid duration"})
+		return
+	}
+	s.fetcher.SetInterval(d)
+	c.JSON(http.StatusOK, gin.H{"interval": d.String()})
+}
+
 const indexHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -128,24 +148,28 @@ const indexHTML = `<!DOCTYPE html>
   .err { color:#eb5757; }
   .probe { color:#56a4f5; font-weight:bold; }
   .meta { font-size:0.58rem; color:#404055; margin-top:12px; letter-spacing:2px; }
+  .controls { display:flex; gap:8px; margin-bottom:12px; align-items:center; }
+  .btn { background:#16161e; border:1px solid #2a2a38; color:#707088; padding:4px 12px; border-radius:4px; font-family:'Courier New',monospace; font-size:0.62rem; letter-spacing:2px; cursor:pointer; transition:all 0.15s; }
+  .btn:hover { border-color:#c9a84c66; color:#c9a84c; }
+  input { background:#0e0e12; border:1px solid #2a2a38; color:#c8c8d4; font-family:'Courier New',monospace; font-size:0.72rem; padding:4px 8px; border-radius:4px; width:80px; text-align:center; }
+  input:focus { border-color:#c9a84c55; outline:none; }
 </style>
 </head>
 <body>
 <h1>⊙ ntp/easy · time probes</h1>
+<div class="controls">
+  <span class="meta">interval:</span>
+  <input id="interval-input" type="text" value="10s" onkeydown="if(event.key==='Enter')setInterval()">
+  <button class="btn" onclick="setInterval()">set</button>
+  <span class="meta" id="interval-status">current: 10s</span>
+</div>
 <table id="tbl">
   <thead>
-    <tr>
-      <th>probe</th>
-      <th>date-time</th>
-      <th>unix ms</th>
-      <th>server ms</th>
-      <th>cloudflare ms</th>
-      <th>ntp name</th>
-    </tr>
+    <tr><th>probe</th><th>date-time</th><th>unix ms</th><th>server ms</th><th>delta</th><th>ntp name</th></tr>
   </thead>
   <tbody id="tbody"></tbody>
 </table>
-<div class="meta">poll every 500ms · SSE /api/stream</div>
+<div class="meta">1 cycle = 3 NTP (apple/google/nist) · SSE /api/stream</div>
 
 <script>
   const tbody = document.getElementById('tbody');
@@ -158,33 +182,40 @@ const indexHTML = `<!DOCTYPE html>
     render();
   }
 
+  async function getInterval() {
+    const r = await fetch('/api/interval');
+    const d = await r.json();
+    document.getElementById('interval-status').textContent = 'current: ' + d.interval;
+    document.getElementById('interval-input').value = d.interval;
+  }
+
+  async function setInterval() {
+    const val = document.getElementById('interval-input').value;
+    await fetch('/api/interval', {method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({interval: val})});
+    getInterval();
+  }
+
   function render() {
     tbody.innerHTML = rows.slice(0,100).map(r => {
-      const serverDiff = r.server_ms ? (r.unix_ms - r.server_ms) : null;
-      const cfDiff = r.cloudflare_ms ? (r.unix_ms - r.cloudflare_ms) : null;
-      const serverCls = serverDiff == null ? '' : Math.abs(serverDiff) < 100 ? 'ok' : Math.abs(serverDiff) < 500 ? 'warn' : 'err';
-      const cfCls = cfDiff == null ? '' : Math.abs(cfDiff) < 100 ? 'ok' : Math.abs(cfDiff) < 500 ? 'warn' : 'err';
+      const d = r.unix_ms - r.server_ms;
+      const c = Math.abs(d) < 100 ? 'ok' : Math.abs(d) < 500 ? 'warn' : 'err';
       return '<tr>' +
         '<td class="probe">' + r.probe + '</td>' +
         '<td>' + r.date_time + '</td>' +
         '<td>' + r.unix_ms + '</td>' +
-        '<td class="' + serverCls + '">' + (r.server_ms || '—') + (serverDiff != null ? ' (' + (serverDiff>0?'+':'') + serverDiff + ')' : '') + '</td>' +
-        '<td class="' + cfCls + '">' + (r.cloudflare_ms || '—') + (cfDiff != null ? ' (' + (cfDiff>0?'+':'') + cfDiff + ')' : '') + '</td>' +
+        '<td class="' + c + '">' + (r.server_ms || '—') + '</td>' +
+        '<td class="' + c + '">' + (r.server_ms ? (d>0?'+':'') + d : '—') + '</td>' +
         '<td>' + (r.ntp_name || '—') + '</td>' +
       '</tr>';
     }).join('');
   }
 
   const es = new EventSource('/api/stream');
-  es.onmessage = ev => {
-    const d = JSON.parse(ev.data);
-    rows.unshift(d);
-    if (rows.length > 200) rows.pop();
-    render();
-  };
+  es.onmessage = ev => { const d=JSON.parse(ev.data); rows.unshift(d); if(rows.length>200)rows.pop(); render(); };
 
   load();
-  setInterval(load, 30000);
+  getInterval();
+  setInterval(getInterval, 30000);
 </script>
 </body>
 </html>`

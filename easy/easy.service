@@ -1,15 +1,17 @@
 [Unit]
 Description=easy time probe
-After=docker.service
-Requires=docker.service
+After=network.target
 
 [Service]
-Type=oneshot
-RemainAfterExit=yes
+Type=simple
 WorkingDirectory=/opt/easy
-ExecStart=/usr/bin/docker compose up -d
-ExecStop=/usr/bin/docker compose down
-TimeoutStartSec=0
+Environment=EASY_DB=/var/lib/easy/easy.db
+Environment=EASY_PORT=8080
+Environment=EASY_INTERVAL=10s
+ExecStart=/opt/easy/easy
+ExecStop=/bin/kill -TERM $MAINPID
+Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

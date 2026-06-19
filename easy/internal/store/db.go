@@ -3,17 +3,19 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
 )
 
 type DB struct {
-	conn *sql.DB
+	conn      *sql.DB
+	writeLock sync.Mutex
 }
 
 func Open(path string) (*DB, error) {
-	conn, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_busy_timeout=3000")
+	conn, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_busy_timeout=10000")
 	if err != nil {
 		return nil, err
 	}
@@ -78,6 +80,8 @@ func (db *DB) Close() error {
 }
 
 func (db *DB) Insert(probe, dateTime string, unixMs, serverMs, cloudflareMs int64, ntpName string) error {
+	db.writeLock.Lock()
+	defer db.writeLock.Unlock()
 	_, err := db.conn.Exec(
 		`INSERT INTO time_log (probe, date_time, unix_ms, server_ms, cloudflare_ms, ntp_name, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -98,6 +102,8 @@ type Row struct {
 }
 
 func (db *DB) InsertPing0000(timeStr, timestamp, device, action string) error {
+	db.writeLock.Lock()
+	defer db.writeLock.Unlock()
 	_, err := db.conn.Exec(
 		`INSERT INTO ping_0000 (time_str, timestamp, device, action, created_at)
 		 VALUES (?, ?, ?, ?, ?)`,

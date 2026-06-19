@@ -4,7 +4,7 @@ Lightweight Go service that continuously polls remote NTP endpoints and displays
 
 ## Dashboard
 
-http://ntp.karpenkodima.com
+https://time.karpenkodima0000.com
 
 ## Architecture
 
@@ -48,7 +48,7 @@ make deploy
 - Name: `easy`
 - IP: `164.92.206.61` (fra1)
 - Size: 1 vCPU / 512MB / 10GB SSD
-- Domain: `ntp.karpenkodima.com` (A → `164.92.206.61`)
+- Domain: `time.karpenkodima0000.com` (A → `165.22.26.212`)
 
 ## SSH
 
