@@ -1,59 +1,45 @@
-# ntp/easy — time probes
+# ntp/easy
+Легкий Go-сервіс, який періодично опитує NTP-сервери (`time.apple.com`, `time.google.com`, `time.nist.gov`) і віддає дані через HTTP API та SSE.
 
-Lightweight Go service that continuously polls remote NTP endpoints and displays time deltas in real-time.
+## Поточна архітектура
+- `internal/fetcher` — UDP NTP-опитування трьох джерел у паралелі.
+- `internal/store` — SQLite (WAL), таблиці `time_log` і `ping_0000`.
+- `internal/server` — Gin API + SSE + вбудований HTML дашборд.
+- `main.go` — запуск fetch loop, HTTP-сервера, graceful shutdown.
 
-## Dashboard
+## API
+- `GET /` — HTML dashboard.
+- `GET /api/recent` — останні записи (`rows`).
+- `GET /api/stream` — SSE-потік оновлень.
+- `GET /api/interval` — поточний інтервал опитування.
+- `POST /api/interval` — встановлення нового інтервалу (`{"interval":"10s"}`).
+- `POST /0000` — запис мобільного ping (`time`, `timestamp`, `device`, `action`).
 
-https://time.karpenkodima0000.com
+## Змінні середовища
+- `EASY_DB` (default: `easy.db`)
+- `EASY_PORT` (default: `8080`)
+- `EASY_INTERVAL` (default: `10s`, мінімум у коді: `5s`)
 
-## Architecture
+## Локальний запуск
+```bash
+go build ./...
+go run .
+```
 
-- `internal/fetcher` — polls 4 endpoints via HTTPS + Basic Auth, stores results
-- `internal/store` — SQLite (WAL mode) with `time_log` and `ping_0000` tables
-- `internal/server` — Gin HTTP server with SSE streaming and embedded HTML dashboard
+## Деплой (systemd)
+Сервіс у проді запускається як systemd unit `easy` (див. `easy.service`).
 
-## Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/` | HTML dashboard |
-| GET | `/api/recent` | Last 500 time_log rows |
-| GET | `/api/stream` | SSE real-time updates |
-| POST | `/0000` | Log device ping (iPhone, Android, etc.) |
-
-## Deploy
-
+Через Makefile:
 ```bash
 make deploy
 ```
 
-## Environment
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `EASY_DB` | `easy.db` | SQLite path |
-| `EASY_PORT` | `8000` | HTTP port |
-| `EASY_INTERVAL_MS` | `500ms` | Poll interval |
-
-## Tables
-
-**time_log** — polls from remote NTP servers
-- `probe`, `date_time`, `unix_ms`, `server_ms`, `cloudflare_ms`, `ntp_name`
-
-**ping_0000** — mobile device pings
-- `time_str`, `timestamp`, `device`, `action`
-
-## Droplet
-
-- Name: `easy`
-- IP: `164.92.206.61` (fra1)
-- Size: 1 vCPU / 512MB / 10GB SSD
-- Domain: `time.karpenkodima0000.com` (A → `165.22.26.212`)
-
-## SSH
-
+Або вручну:
 ```bash
-ssh easy-droplet
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o easy-linux .
+scp easy-linux easy-droplet:/opt/easy/easy
+ssh easy-droplet 'chmod +x /opt/easy/easy && systemctl restart easy && systemctl status easy --no-pager'
 ```
 
-Uses RSA key `~/.ssh/golden-ratio` only.
+## Примітка по доступу
+- Для серверного доступу використовується `root` + RSA-ключ.

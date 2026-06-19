@@ -1,21 +1,37 @@
-HOST    = easy-droplet
-APP_DIR = /opt/easy
-IMAGE   = easy-ntp
+GO ?= go
+
+HOST ?= easy-droplet
+APP_DIR ?= /opt/easy
+SERVICE ?= easy
+
+BIN_LOCAL ?= easy
+BIN_LINUX ?= easy-linux
+
+.PHONY: build
+build:
+	$(GO) build -o $(BIN_LOCAL) .
+
+.PHONY: build-linux
+build-linux:
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 $(GO) build -o $(BIN_LINUX) .
+
+.PHONY: run
+run:
+	$(GO) run .
+
+.PHONY: test
+test:
+	$(GO) test ./...
 
 .PHONY: deploy
- deploy:
-	@echo "→ pushing to GitHub..."
-	@git push origin main
-	@echo "→ deploying to $(HOST)..."
-	@ssh $(HOST) 'set -e; \
-	  cd $(APP_DIR) && git pull -q; \
-	  docker compose up -d --build; \
-	  echo "✓ deployed"'
+deploy: build-linux
+	scp $(BIN_LINUX) $(HOST):$(APP_DIR)/easy
+	ssh $(HOST) 'chmod +x $(APP_DIR)/easy && systemctl restart $(SERVICE) && systemctl status $(SERVICE) --no-pager'
 
 .PHONY: logs
 logs:
-	ssh $(HOST) "docker compose -f $(APP_DIR)/docker-compose.yml logs -f"
+	ssh $(HOST) 'journalctl -u $(SERVICE) -f --no-pager'
 
 .PHONY: status
 status:
-	ssh $(HOST) "docker compose -f $(APP_DIR)/docker-compose.yml ps"
+	ssh $(HOST) 'systemctl status $(SERVICE) --no-pager'
