@@ -43,3 +43,35 @@ ssh easy-droplet 'chmod +x /opt/easy/easy && systemctl restart easy && systemctl
 
 ## Примітка по доступу
 - Для серверного доступу використовується `root` + RSA-ключ.
+
+## Моніторинг і статистика DNS
+Моніторинг налаштований синхронно на двох DNS-серверах:
+- `fra-dns` (`64.226.73.107`, `2a03:b0c0:3:f0:0:2:8fa9:e000`)
+- `fra-dns-2` (`165.227.157.91`, `2a03:b0c0:3:f0:0:2:8fbc:f000`)
+
+### Скрипти
+- `/usr/local/sbin/dns-health-check.js` — перевірка DNS по IPv4/IPv6, логування `status`, `answer_count`, `latency_ms`.
+- `/usr/local/sbin/dns-alert-evaluator.js` — оцінка деградації (consecutive fails), запис подій у alerts лог, опційний Telegram.
+- `/usr/local/sbin/dns-stats-aggregate.js` — агрегація статистики за 24h/7d.
+
+### Systemd таймери
+- `dns-health-check.timer` — кожні 5 хвилин.
+- `dns-alert-evaluator.timer` — кожні 5 хвилин.
+- `dns-stats-aggregate.timer` — кожні 15 хвилин.
+- `root-hints-rotate.timer` — кожні 2 години.
+
+### Артефакти моніторингу
+- Логи:
+  - `/var/log/named/health.log`
+  - `/var/log/named/alerts.log`
+  - `/var/log/named/stats.log`
+- JSON статистика:
+  - `/var/log/named/stats/latest.json`
+  - `/var/log/named/stats/24h.json`
+  - `/var/log/named/stats/7d.json`
+
+### Результати останньої верифікації
+- На обох серверах health-check має `status=ok`.
+- `alerts.log`: `action=none`, `consecutive_fails=0`.
+- `24h.json` і `7d.json`: `failed=0`, `uptime_percent=100`.
+- `latest.json`: `latest_status=ok`.
