@@ -52,6 +52,9 @@ func TestApexRootShowsGatewayWithoutAuth(t *testing.T) {
 	if strings.Contains(body, `name="sequence"`) || strings.Contains(body, `>sequence<`) {
 		t.Fatalf("gateway still exposes sequence field: %s", rec.Body.String())
 	}
+	if strings.Contains(body, `value="≠"`) {
+		t.Fatalf("gateway still exposes not-equal action: %s", rec.Body.String())
+	}
 }
 
 func TestSubdomainRootRequiresAuth(t *testing.T) {

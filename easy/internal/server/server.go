@@ -560,22 +560,22 @@ const gatewayHTML = `<!DOCTYPE html>
 <title>karpenkodima0000.com</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { min-height:100vh; display:grid; place-items:center; background:#0b0b0d; color:#d8d8df; font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:22px; }
-  main { width:min(440px,100%); }
-  h1 { font-size:0.78rem; font-weight:500; color:#9a9aa7; letter-spacing:0.18em; text-transform:uppercase; margin-bottom:18px; }
-  form { display:grid; gap:10px; }
-  label { color:#6f6f7b; font-size:0.62rem; letter-spacing:0.18em; text-transform:uppercase; }
-  input { width:100%; height:44px; background:#111115; border:1px solid #2a2a32; color:#e6e6ea; padding:0 12px; border-radius:0; font:0.95rem 'SF Mono','Courier New',monospace; outline:none; }
-  input:focus { border-color:#c9a84c; }
-  .digits { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; margin:4px 0 2px; }
-  .digit { display:grid; gap:6px; }
-  .digit span { color:#595965; font:0.68rem 'SF Mono','Courier New',monospace; text-align:center; }
-  .digit input { aspect-ratio:1; height:auto; padding:0; text-align:center; font-size:1.35rem; }
-  .symbols { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:2px; }
-  button { height:48px; border-radius:0; border:1px solid #2a2a32; background:#101014; color:#a2a2ad; cursor:pointer; font:1rem 'SF Mono','Courier New',monospace; }
-  button:hover { border-color:#c9a84c; color:#c9a84c; }
-  .hint { margin-top:14px; color:#494952; font-size:0.68rem; line-height:1.6; font-family:'SF Mono','Courier New',monospace; }
-  @media (max-width:520px) { main { width:min(360px,100%); } .digits { grid-template-columns:repeat(4,1fr); } }
+  body { min-height:100vh; display:grid; place-items:center; background:#f7f7f2; color:#171716; font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:24px; }
+  main { width:min(620px,100%); }
+  h1 { font-size:0.82rem; font-weight:650; color:#6f706c; letter-spacing:0.18em; text-transform:uppercase; margin-bottom:22px; }
+  form { display:grid; gap:16px; }
+  label { color:#6d6d68; font-size:0.68rem; font-weight:700; letter-spacing:0.18em; text-transform:uppercase; }
+  input { width:100%; height:58px; background:#fffefa; border:1px solid #d8d6ca; color:#11110f; padding:0 16px; border-radius:0; box-shadow:7px 7px 0 #dedbd0, inset 0 1px 0 #ffffff; font:1.15rem 'SF Mono','Courier New',monospace; outline:none; }
+  input:focus { border-color:#171716; box-shadow:7px 7px 0 #c9a84c, inset 0 1px 0 #ffffff; }
+  .digits { display:grid; grid-template-columns:repeat(7,1fr); gap:12px; margin:2px 0 4px; }
+  .digit { display:grid; gap:8px; }
+  .digit span { color:#818178; font:700 0.78rem 'SF Mono','Courier New',monospace; text-align:center; }
+  .digit input { aspect-ratio:1; height:auto; min-height:70px; padding:0; text-align:center; font-size:2rem; font-weight:800; }
+  button { width:100%; height:70px; border-radius:0; border:1px solid #171716; background:#171716; color:#fffefa; cursor:pointer; box-shadow:8px 8px 0 #c9a84c; font:2rem 'SF Mono','Courier New',monospace; transition:transform 120ms ease, box-shadow 120ms ease; }
+  button:hover { transform:translate(-2px,-2px); box-shadow:10px 10px 0 #c9a84c; }
+  button:active { transform:translate(4px,4px); box-shadow:4px 4px 0 #c9a84c; }
+  .hint { margin-top:18px; color:#8b8b84; font-size:0.72rem; line-height:1.6; font-family:'SF Mono','Courier New',monospace; }
+  @media (max-width:640px) { main { width:min(380px,100%); } .digits { grid-template-columns:repeat(4,1fr); gap:10px; } .digit input { min-height:76px; } }
 </style>
 </head>
 <body>
@@ -593,12 +593,9 @@ const gatewayHTML = `<!DOCTYPE html>
       <label class="digit" for="d2"><span>2</span><input id="d2" name="d2" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
       <label class="digit" for="d1"><span>1</span><input id="d1" name="d1" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
     </div>
-    <div class="symbols">
-      <button type="submit" name="symbol" value="🫆">🫆</button>
-      <button type="submit" name="symbol" value="≠">≠</button>
-    </div>
+    <button type="submit" name="symbol" value="🫆">🫆</button>
   </form>
-  <p class="hint">quiet access window · 10 minutes · signed cookie</p>
+  <p class="hint">Verified users only</p>
 </main>
 <script>
   document.querySelectorAll('[data-digit]').forEach((input, index, inputs) => {
