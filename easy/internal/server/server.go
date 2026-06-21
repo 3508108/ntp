@@ -42,6 +42,26 @@ type authReq struct {
 	ClientID string `json:"client_id"`
 	Sequence string `json:"sequence"`
 	Symbol   string `json:"symbol"`
+	D5       string `json:"d5"`
+	D4       string `json:"d4"`
+	D3       string `json:"d3"`
+	D6       string `json:"d6"`
+	D7       string `json:"d7"`
+	D2       string `json:"d2"`
+	D1       string `json:"d1"`
+}
+
+func (r authReq) submittedSequence() string {
+	if seq := strings.TrimSpace(r.Sequence); seq != "" {
+		return seq
+	}
+	return strings.TrimSpace(r.D5) +
+		strings.TrimSpace(r.D4) +
+		strings.TrimSpace(r.D3) +
+		strings.TrimSpace(r.D6) +
+		strings.TrimSpace(r.D7) +
+		strings.TrimSpace(r.D2) +
+		strings.TrimSpace(r.D1)
 }
 
 type streamRow struct {
@@ -297,15 +317,22 @@ func (s *Server) handleAuth(c *gin.Context) {
 	} else {
 		req.ClientID = c.PostForm("client_id")
 		req.Sequence = c.PostForm("sequence")
+		req.D5 = c.PostForm("d5")
+		req.D4 = c.PostForm("d4")
+		req.D3 = c.PostForm("d3")
+		req.D6 = c.PostForm("d6")
+		req.D7 = c.PostForm("d7")
+		req.D2 = c.PostForm("d2")
+		req.D1 = c.PostForm("d1")
 		req.Symbol = c.PostForm("symbol")
 	}
 	req.ClientID = strings.TrimSpace(req.ClientID)
-	req.Sequence = strings.TrimSpace(req.Sequence)
+	sequence := req.submittedSequence()
 	req.Symbol = strings.TrimSpace(req.Symbol)
 
 	ok := req.ClientID != "" &&
 		req.Symbol == successSymbol &&
-		subtle.ConstantTimeCompare([]byte(req.Sequence), s.authKey) == 1
+		subtle.ConstantTimeCompare([]byte(sequence), s.authKey) == 1
 	if !ok {
 		if wantsHTML(c) {
 			c.Header("Content-Type", "text/html; charset=utf-8")
@@ -536,34 +563,36 @@ const gatewayHTML = `<!DOCTYPE html>
   body { min-height:100vh; display:grid; place-items:center; background:#0b0b0d; color:#d8d8df; font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:22px; }
   main { width:min(440px,100%); }
   h1 { font-size:0.78rem; font-weight:500; color:#9a9aa7; letter-spacing:0.18em; text-transform:uppercase; margin-bottom:18px; }
-  .grid { display:grid; grid-template-columns:repeat(2,1fr); border:1px solid #2a2a32; margin-bottom:12px; }
-  .cell { aspect-ratio:1.7; display:grid; place-items:center; border-right:1px solid #2a2a32; border-bottom:1px solid #2a2a32; color:#555562; font-family:'SF Mono','Courier New',monospace; font-size:0.84rem; }
-  .cell:nth-child(2n) { border-right:0; }
-  .cell:nth-last-child(-n+2) { border-bottom:0; }
   form { display:grid; gap:10px; }
   label { color:#6f6f7b; font-size:0.62rem; letter-spacing:0.18em; text-transform:uppercase; }
   input { width:100%; height:44px; background:#111115; border:1px solid #2a2a32; color:#e6e6ea; padding:0 12px; border-radius:0; font:0.95rem 'SF Mono','Courier New',monospace; outline:none; }
   input:focus { border-color:#c9a84c; }
+  .digits { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; margin:4px 0 2px; }
+  .digit { display:grid; gap:6px; }
+  .digit span { color:#595965; font:0.68rem 'SF Mono','Courier New',monospace; text-align:center; }
+  .digit input { aspect-ratio:1; height:auto; padding:0; text-align:center; font-size:1.35rem; }
   .symbols { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:2px; }
   button { height:48px; border-radius:0; border:1px solid #2a2a32; background:#101014; color:#a2a2ad; cursor:pointer; font:1rem 'SF Mono','Courier New',monospace; }
   button:hover { border-color:#c9a84c; color:#c9a84c; }
   .hint { margin-top:14px; color:#494952; font-size:0.68rem; line-height:1.6; font-family:'SF Mono','Courier New',monospace; }
+  @media (max-width:520px) { main { width:min(360px,100%); } .digits { grid-template-columns:repeat(4,1fr); } }
 </style>
 </head>
 <body>
 <main>
   <h1>karpenkodima0000.com</h1>
-  <div class="grid" aria-hidden="true">
-    <div class="cell">5</div><div class="cell">4</div>
-    <div class="cell">3</div><div class="cell">6</div>
-    <div class="cell">7</div><div class="cell">2</div>
-    <div class="cell">1</div><div class="cell">🫆 / ≠</div>
-  </div>
   <form method="post" action="/auth">
     <label for="client_id">client id</label>
     <input id="client_id" name="client_id" type="text" autocomplete="username" required>
-    <label for="sequence">sequence</label>
-    <input id="sequence" name="sequence" type="password" inputmode="numeric" autocomplete="off" required>
+    <div class="digits" aria-label="access digits">
+      <label class="digit" for="d5"><span>5</span><input id="d5" name="d5" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="d4"><span>4</span><input id="d4" name="d4" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="d3"><span>3</span><input id="d3" name="d3" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="d6"><span>6</span><input id="d6" name="d6" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="d7"><span>7</span><input id="d7" name="d7" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="d2"><span>2</span><input id="d2" name="d2" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="d1"><span>1</span><input id="d1" name="d1" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+    </div>
     <div class="symbols">
       <button type="submit" name="symbol" value="🫆">🫆</button>
       <button type="submit" name="symbol" value="≠">≠</button>
@@ -571,6 +600,17 @@ const gatewayHTML = `<!DOCTYPE html>
   </form>
   <p class="hint">quiet access window · 10 minutes · signed cookie</p>
 </main>
+<script>
+  document.querySelectorAll('[data-digit]').forEach((input, index, inputs) => {
+    input.addEventListener('input', () => {
+      input.value = input.value.replace(/\D/g, '').slice(0, 1);
+      if (input.value && inputs[index + 1]) inputs[index + 1].focus();
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Backspace' && !input.value && inputs[index - 1]) inputs[index - 1].focus();
+    });
+  });
+</script>
 </body>
 </html>`
 

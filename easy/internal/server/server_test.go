@@ -45,8 +45,12 @@ func TestApexRootShowsGatewayWithoutAuth(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), `name="sequence"`) || !strings.Contains(rec.Body.String(), `name="client_id"`) {
+	body := rec.Body.String()
+	if !strings.Contains(body, `name="client_id"`) || !strings.Contains(body, `name="d5"`) || !strings.Contains(body, `name="d1"`) {
 		t.Fatalf("gateway missing expected fields: %s", rec.Body.String())
+	}
+	if strings.Contains(body, `name="sequence"`) || strings.Contains(body, `>sequence<`) {
+		t.Fatalf("gateway still exposes sequence field: %s", rec.Body.String())
 	}
 }
 
@@ -165,10 +169,10 @@ func TestHandleSetIntervalRejectsInvalidDuration(t *testing.T) {
 	}
 }
 
-func TestAuthAcceptsClientIDSequenceAndSymbol(t *testing.T) {
+func TestAuthAcceptsClientIDDigitsAndSymbol(t *testing.T) {
 	srv, _ := newTestServer(t)
 
-	req := httptest.NewRequest(http.MethodPost, "/auth", strings.NewReader(`{"client_id":"string","sequence":"1800853","symbol":"🫆"}`))
+	req := httptest.NewRequest(http.MethodPost, "/auth", strings.NewReader(`{"client_id":"string","d5":"1","d4":"8","d3":"0","d6":"0","d7":"8","d2":"5","d1":"3","symbol":"🫆"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	rec := httptest.NewRecorder()
@@ -203,9 +207,9 @@ func TestAuthRejectsWrongSequenceAndNotEqualSymbol(t *testing.T) {
 	srv, _ := newTestServer(t)
 
 	for _, body := range []string{
-		`{"client_id":"string","sequence":"1800852","symbol":"🫆"}`,
-		`{"client_id":"string","sequence":"1800853","symbol":"≠"}`,
-		`{"client_id":"","sequence":"1800853","symbol":"🫆"}`,
+		`{"client_id":"string","d5":"1","d4":"8","d3":"0","d6":"0","d7":"8","d2":"5","d1":"2","symbol":"🫆"}`,
+		`{"client_id":"string","d5":"1","d4":"8","d3":"0","d6":"0","d7":"8","d2":"5","d1":"3","symbol":"≠"}`,
+		`{"client_id":"","d5":"1","d4":"8","d3":"0","d6":"0","d7":"8","d2":"5","d1":"3","symbol":"🫆"}`,
 	} {
 		req := httptest.NewRequest(http.MethodPost, "/auth", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
