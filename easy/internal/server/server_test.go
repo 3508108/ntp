@@ -31,7 +31,37 @@ func newTestServer(t *testing.T) (*Server, *store.DB) {
 
 func addAuth(req *http.Request) {
 	req.Header.Set("X-Client-ID", "test-client")
-	req.Header.Set("X-Password", "350810818")
+	req.Header.Set("X-Password", "1800853")
+}
+
+func TestApexRootShowsGatewayWithoutAuth(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "karpenkodima0000.com"
+	rec := httptest.NewRecorder()
+	srv.engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `name="sequence"`) || !strings.Contains(rec.Body.String(), `name="client_id"`) {
+		t.Fatalf("gateway missing expected fields: %s", rec.Body.String())
+	}
+}
+
+func TestSubdomainRootRequiresAuth(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "ntp.karpenkodima0000.com"
+	req.Header.Set("Accept", "application/json")
+	rec := httptest.NewRecorder()
+	srv.engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestHandleRecentReturnsSnakeCaseRows(t *testing.T) {
@@ -135,10 +165,10 @@ func TestHandleSetIntervalRejectsInvalidDuration(t *testing.T) {
 	}
 }
 
-func TestLoginAcceptsClientIDAndPassword(t *testing.T) {
+func TestAuthAcceptsClientIDSequenceAndSymbol(t *testing.T) {
 	srv, _ := newTestServer(t)
 
-	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(`{"client_id":"client-a","password":"350810818"}`))
+	req := httptest.NewRequest(http.MethodPost, "/auth", strings.NewReader(`{"client_id":"string","sequence":"1800853","symbol":"🫆"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	rec := httptest.NewRecorder()
@@ -147,8 +177,12 @@ func TestLoginAcceptsClientIDAndPassword(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	if rec.Result().Cookies()[0].Name != authCookie {
+	cookies := rec.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != authCookie {
 		t.Fatalf("auth cookie not set: %#v", rec.Result().Cookies())
+	}
+	if cookies[0].Domain != strings.TrimPrefix(authCookieDomain, ".") || cookies[0].MaxAge != int(cookieTTL.Seconds()) || !cookies[0].Secure {
+		t.Fatalf("unexpected cookie: %#v", cookies[0])
 	}
 }
 
@@ -162,6 +196,55 @@ func TestProtectedRoutesRequireAuth(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAuthRejectsWrongSequenceAndNotEqualSymbol(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	for _, body := range []string{
+		`{"client_id":"string","sequence":"1800852","symbol":"🫆"}`,
+		`{"client_id":"string","sequence":"1800853","symbol":"≠"}`,
+		`{"client_id":"","sequence":"1800853","symbol":"🫆"}`,
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/auth", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		rec := httptest.NewRecorder()
+		srv.engine.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("body %s: status = %d, response = %s", body, rec.Code, rec.Body.String())
+		}
+		if len(rec.Result().Cookies()) != 0 {
+			t.Fatalf("body %s: unexpected cookies %#v", body, rec.Result().Cookies())
+		}
+	}
+}
+
+func TestCookieOpensProtectedRouteAndTamperedCookieFails(t *testing.T) {
+	srv, db := newTestServer(t)
+	if err := db.Insert("google", "2026-06-21 12:00:00.000", 2000, 1997, 0, "time.google.com"); err != nil {
+		t.Fatalf("Insert() error = %v", err)
+	}
+
+	cookie := &http.Cookie{Name: authCookie, Value: srv.makeToken("string", time.Now().Add(cookieTTL))}
+	req := httptest.NewRequest(http.MethodGet, "/api/logs?range=hour", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	srv.engine.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	bad := &http.Cookie{Name: authCookie, Value: cookie.Value + "x"}
+	req = httptest.NewRequest(http.MethodGet, "/api/logs?range=hour", nil)
+	req.Header.Set("Accept", "application/json")
+	req.AddCookie(bad)
+	rec = httptest.NewRecorder()
+	srv.engine.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("tampered status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 }
 

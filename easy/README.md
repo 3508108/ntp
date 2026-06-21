@@ -9,7 +9,10 @@
 
 ## API
 - `GET /` — HTML dashboard.
-- `GET /login` / `POST /login` — auth form/API (`client_id`, `password`).
+- `GET /` на `karpenkodima0000.com` — public auth gateway.
+- `POST /auth` — gateway auth (`client_id`, `sequence`, `symbol`), cookie на 10 хв для `.karpenkodima0000.com`.
+- `GET /login` / `POST /login` — fallback auth form/API (`client_id`, `password`).
+- `GET /` на `time.*` / `ntp.*` — HTML dashboard після auth-cookie.
 - `GET /api/logs?range=hour|day|week|all` — повні time logs, newest first.
 - `GET /api/recent` — останні 500 записів (`rows`).
 - `GET /api/stream` — SSE-потік нових записів.
@@ -20,7 +23,7 @@
 - `EASY_DB` (default: `easy.db`)
 - `EASY_PORT` (default: `8080`)
 - `EASY_INTERVAL` (default: `10s`, мінімум у коді: `5s`)
-- `EASY_PASSWORD` (default: `350810818`)
+- `EASY_PASSWORD` (default: `1800853`)
 
 ## Локальний запуск
 ```bash

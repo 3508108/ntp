@@ -38,6 +38,12 @@ type loginReq struct {
 	Password string `json:"password"`
 }
 
+type authReq struct {
+	ClientID string `json:"client_id"`
+	Sequence string `json:"sequence"`
+	Symbol   string `json:"symbol"`
+}
+
 type streamRow struct {
 	Probe    string `json:"probe"`
 	DateTime string `json:"date_time"`
@@ -47,7 +53,13 @@ type streamRow struct {
 	NtpName  string `json:"ntp_name"`
 }
 
-const authCookie = "easy_auth"
+const (
+	authCookie       = "easy_auth"
+	authCookieDomain = ".karpenkodima0000.com"
+	cookieTTL        = 10 * time.Minute
+	apexHost         = "karpenkodima0000.com"
+	successSymbol    = "🫆"
+)
 
 func New(db *store.DB, f *fetcher.Fetcher) *Server {
 	gin.SetMode(gin.ReleaseMode)
@@ -56,12 +68,13 @@ func New(db *store.DB, f *fetcher.Fetcher) *Server {
 	r.Use(cors.Default())
 
 	s := &Server{db: db, engine: r, fetcher: f, authKey: []byte(authPassword())}
-	r.GET("/login", s.handleLoginPage)
+	r.GET("/", s.handleRoot)
+	r.GET("/login", s.handleGateway)
 	r.POST("/login", s.handleLogin)
+	r.POST("/auth", s.handleAuth)
 	r.GET("/logout", s.handleLogout)
 
 	authed := r.Group("", s.requireAuth)
-	authed.GET("/", s.handleIndex)
 	authed.GET("/api/recent", s.handleRecent)
 	authed.GET("/api/logs", s.handleLogs)
 	authed.GET("/api/stream", s.handleStream)
@@ -84,6 +97,27 @@ func (s *Server) Shutdown() error {
 func (s *Server) handleIndex(c *gin.Context) {
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.String(http.StatusOK, indexHTML)
+}
+
+func (s *Server) handleRoot(c *gin.Context) {
+	if requestHost(c) == apexHost {
+		s.handleGateway(c)
+		return
+	}
+	if s.isAuthenticated(c) {
+		s.handleIndex(c)
+		return
+	}
+	if wantsHTML(c) {
+		c.Redirect(http.StatusFound, "https://"+apexHost+"/")
+		return
+	}
+	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+}
+
+func (s *Server) handleGateway(c *gin.Context) {
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, gatewayHTML)
 }
 
 func (s *Server) handleRecent(c *gin.Context) {
@@ -194,15 +228,11 @@ func authPassword() string {
 	if p := os.Getenv("EASY_PASSWORD"); p != "" {
 		return p
 	}
-	return "350810818"
+	return "1800853"
 }
 
 func (s *Server) requireAuth(c *gin.Context) {
-	if s.validHeaderAuth(c) {
-		c.Next()
-		return
-	}
-	if token, err := c.Cookie(authCookie); err == nil && s.validToken(token) {
+	if s.isAuthenticated(c) {
 		c.Next()
 		return
 	}
@@ -214,6 +244,14 @@ func (s *Server) requireAuth(c *gin.Context) {
 	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 }
 
+func (s *Server) isAuthenticated(c *gin.Context) bool {
+	if s.validHeaderAuth(c) {
+		return true
+	}
+	token, err := c.Cookie(authCookie)
+	return err == nil && s.validToken(token)
+}
+
 func (s *Server) validHeaderAuth(c *gin.Context) bool {
 	clientID := strings.TrimSpace(c.GetHeader("X-Client-ID"))
 	password := c.GetHeader("X-Password")
@@ -221,8 +259,7 @@ func (s *Server) validHeaderAuth(c *gin.Context) bool {
 }
 
 func (s *Server) handleLoginPage(c *gin.Context) {
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.String(http.StatusOK, loginHTML)
+	s.handleGateway(c)
 }
 
 func (s *Server) handleLogin(c *gin.Context) {
@@ -238,21 +275,14 @@ func (s *Server) handleLogin(c *gin.Context) {
 	if req.ClientID == "" || subtle.ConstantTimeCompare([]byte(req.Password), s.authKey) != 1 {
 		if wantsHTML(c) {
 			c.Header("Content-Type", "text/html; charset=utf-8")
-			c.String(http.StatusUnauthorized, loginHTML)
+			c.String(http.StatusUnauthorized, gatewayHTML)
 			return
 		}
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     authCookie,
-		Value:    s.makeToken(req.ClientID, time.Now().Add(7*24*time.Hour)),
-		Path:     "/",
-		MaxAge:   7 * 24 * 3600,
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-	})
+	s.setAuthCookie(c, req.ClientID)
 	if wantsHTML(c) {
 		c.Redirect(http.StatusFound, "/")
 		return
@@ -260,9 +290,60 @@ func (s *Server) handleLogin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "client_id": req.ClientID})
 }
 
+func (s *Server) handleAuth(c *gin.Context) {
+	var req authReq
+	if strings.Contains(c.GetHeader("Content-Type"), "application/json") {
+		_ = c.ShouldBindJSON(&req)
+	} else {
+		req.ClientID = c.PostForm("client_id")
+		req.Sequence = c.PostForm("sequence")
+		req.Symbol = c.PostForm("symbol")
+	}
+	req.ClientID = strings.TrimSpace(req.ClientID)
+	req.Sequence = strings.TrimSpace(req.Sequence)
+	req.Symbol = strings.TrimSpace(req.Symbol)
+
+	ok := req.ClientID != "" &&
+		req.Symbol == successSymbol &&
+		subtle.ConstantTimeCompare([]byte(req.Sequence), s.authKey) == 1
+	if !ok {
+		if wantsHTML(c) {
+			c.Header("Content-Type", "text/html; charset=utf-8")
+			c.String(http.StatusUnauthorized, gatewayHTML)
+			return
+		}
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	s.setAuthCookie(c, req.ClientID)
+	if wantsHTML(c) {
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.String(http.StatusOK, successHTML)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"status":    "ok",
+		"client_id": req.ClientID,
+		"links": []string{
+			"https://time.karpenkodima0000.com/",
+			"https://ntp.karpenkodima0000.com/",
+		},
+	})
+}
+
 func (s *Server) handleLogout(c *gin.Context) {
-	http.SetCookie(c.Writer, &http.Cookie{Name: authCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
-	c.Redirect(http.StatusFound, "/login")
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     authCookie,
+		Value:    "",
+		Domain:   authCookieDomain,
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	})
+	c.Redirect(http.StatusFound, "https://"+apexHost+"/")
 }
 
 func wantsHTML(c *gin.Context) bool {
@@ -270,9 +351,32 @@ func wantsHTML(c *gin.Context) bool {
 	return accept == "" || strings.Contains(accept, "text/html")
 }
 
+func requestHost(c *gin.Context) string {
+	host := strings.ToLower(c.Request.Host)
+	if idx := strings.IndexByte(host, ':'); idx >= 0 {
+		host = host[:idx]
+	}
+	return host
+}
+
+func (s *Server) setAuthCookie(c *gin.Context, clientID string) {
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     authCookie,
+		Value:    s.makeToken(clientID, time.Now().Add(cookieTTL)),
+		Domain:   authCookieDomain,
+		Path:     "/",
+		MaxAge:   int(cookieTTL.Seconds()),
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	})
+}
+
 func (s *Server) makeToken(clientID string, exp time.Time) string {
+	nowUnix := time.Now().Unix()
 	expUnix := exp.Unix()
-	payload := clientID + "|" + strconv.FormatInt(expUnix, 10)
+	nonce := strconv.FormatInt(time.Now().UnixNano(), 36)
+	payload := clientID + "|" + strconv.FormatInt(nowUnix, 10) + "|" + strconv.FormatInt(expUnix, 10) + "|" + nonce
 	mac := hmac.New(sha256.New, s.authKey)
 	mac.Write([]byte(payload))
 	raw := payload + "|" + hex.EncodeToString(mac.Sum(nil))
@@ -285,18 +389,21 @@ func (s *Server) validToken(token string) bool {
 		return false
 	}
 	parts := strings.Split(string(raw), "|")
-	if len(parts) != 3 || parts[0] == "" {
+	if len(parts) != 5 || parts[0] == "" || parts[3] == "" {
 		return false
 	}
-	exp, err := strconv.ParseInt(parts[1], 10, 64)
+	if _, err := strconv.ParseInt(parts[1], 10, 64); err != nil {
+		return false
+	}
+	exp, err := strconv.ParseInt(parts[2], 10, 64)
 	if err != nil || time.Now().Unix() > exp {
 		return false
 	}
-	payload := parts[0] + "|" + parts[1]
+	payload := parts[0] + "|" + parts[1] + "|" + parts[2] + "|" + parts[3]
 	mac := hmac.New(sha256.New, s.authKey)
 	mac.Write([]byte(payload))
 	want := hex.EncodeToString(mac.Sum(nil))
-	return subtle.ConstantTimeCompare([]byte(parts[2]), []byte(want)) == 1
+	return subtle.ConstantTimeCompare([]byte(parts[4]), []byte(want)) == 1
 }
 
 const indexHTML = `<!DOCTYPE html>
@@ -418,30 +525,82 @@ const indexHTML = `<!DOCTYPE html>
 </body>
 </html>`
 
-const loginHTML = `<!DOCTYPE html>
+const gatewayHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ntp/easy — login</title>
+<title>karpenkodima0000.com</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { min-height:100vh; display:grid; place-items:center; background:#0e0e12; color:#c8c8d4; font-family:'Courier New',monospace; padding:20px; }
-  form { width:min(360px,100%); border:1px solid #24242e; padding:24px; background:#111118; }
-  h1 { font-size:0.85rem; color:#c9a84c; letter-spacing:3px; text-transform:uppercase; margin-bottom:18px; }
-  label { display:block; color:#707088; font-size:0.62rem; letter-spacing:2px; text-transform:uppercase; margin:14px 0 6px; }
-  input { width:100%; background:#0e0e12; border:1px solid #2a2a38; color:#c8c8d4; font-family:'Courier New',monospace; padding:9px 10px; border-radius:4px; }
-  button { width:100%; margin-top:18px; background:#16161e; border:1px solid #c9a84c66; color:#c9a84c; padding:10px 12px; border-radius:4px; font-family:'Courier New',monospace; letter-spacing:2px; cursor:pointer; }
+  body { min-height:100vh; display:grid; place-items:center; background:#0b0b0d; color:#d8d8df; font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:22px; }
+  main { width:min(440px,100%); }
+  h1 { font-size:0.78rem; font-weight:500; color:#9a9aa7; letter-spacing:0.18em; text-transform:uppercase; margin-bottom:18px; }
+  .grid { display:grid; grid-template-columns:repeat(2,1fr); border:1px solid #2a2a32; margin-bottom:12px; }
+  .cell { aspect-ratio:1.7; display:grid; place-items:center; border-right:1px solid #2a2a32; border-bottom:1px solid #2a2a32; color:#555562; font-family:'SF Mono','Courier New',monospace; font-size:0.84rem; }
+  .cell:nth-child(2n) { border-right:0; }
+  .cell:nth-last-child(-n+2) { border-bottom:0; }
+  form { display:grid; gap:10px; }
+  label { color:#6f6f7b; font-size:0.62rem; letter-spacing:0.18em; text-transform:uppercase; }
+  input { width:100%; height:44px; background:#111115; border:1px solid #2a2a32; color:#e6e6ea; padding:0 12px; border-radius:0; font:0.95rem 'SF Mono','Courier New',monospace; outline:none; }
+  input:focus { border-color:#c9a84c; }
+  .symbols { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:2px; }
+  button { height:48px; border-radius:0; border:1px solid #2a2a32; background:#101014; color:#a2a2ad; cursor:pointer; font:1rem 'SF Mono','Courier New',monospace; }
+  button:hover { border-color:#c9a84c; color:#c9a84c; }
+  .hint { margin-top:14px; color:#494952; font-size:0.68rem; line-height:1.6; font-family:'SF Mono','Courier New',monospace; }
 </style>
 </head>
 <body>
-<form method="post" action="/login">
-  <h1>ntp/easy auth</h1>
-  <label for="client_id">client id</label>
-  <input id="client_id" name="client_id" type="text" autocomplete="username" required>
-  <label for="password">password</label>
-  <input id="password" name="password" type="password" autocomplete="current-password" required>
-  <button type="submit">login</button>
-</form>
+<main>
+  <h1>karpenkodima0000.com</h1>
+  <div class="grid" aria-hidden="true">
+    <div class="cell">5</div><div class="cell">4</div>
+    <div class="cell">3</div><div class="cell">6</div>
+    <div class="cell">7</div><div class="cell">2</div>
+    <div class="cell">1</div><div class="cell">🫆 / ≠</div>
+  </div>
+  <form method="post" action="/auth">
+    <label for="client_id">client id</label>
+    <input id="client_id" name="client_id" type="text" autocomplete="username" required>
+    <label for="sequence">sequence</label>
+    <input id="sequence" name="sequence" type="password" inputmode="numeric" autocomplete="off" required>
+    <div class="symbols">
+      <button type="submit" name="symbol" value="🫆">🫆</button>
+      <button type="submit" name="symbol" value="≠">≠</button>
+    </div>
+  </form>
+  <p class="hint">quiet access window · 10 minutes · signed cookie</p>
+</main>
+</body>
+</html>`
+
+const successHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>karpenkodima0000.com — access</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { min-height:100vh; display:grid; place-items:center; background:#0b0b0d; color:#d8d8df; font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:22px; }
+  main { width:min(520px,100%); }
+  h1 { font-size:0.78rem; font-weight:500; color:#9a9aa7; letter-spacing:0.18em; text-transform:uppercase; margin-bottom:18px; }
+  .links { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  a { min-height:148px; display:grid; align-content:end; border:1px solid #2a2a32; background:#101014; color:#e6e6ea; padding:18px; text-decoration:none; border-radius:0; }
+  a:hover { border-color:#c9a84c; color:#c9a84c; }
+  strong { font-size:1rem; font-family:'SF Mono','Courier New',monospace; font-weight:500; }
+  span { margin-top:8px; color:#5e5e68; font-size:0.72rem; }
+  p { margin-top:14px; color:#494952; font-size:0.68rem; font-family:'SF Mono','Courier New',monospace; }
+</style>
+</head>
+<body>
+<main>
+  <h1>access</h1>
+  <div class="links">
+    <a href="https://time.karpenkodima0000.com/"><strong>time</strong><span>time.karpenkodima0000.com</span></a>
+    <a href="https://ntp.karpenkodima0000.com/"><strong>ntp</strong><span>ntp.karpenkodima0000.com</span></a>
+  </div>
+  <p>session expires in 10 minutes</p>
+</main>
 </body>
 </html>`
