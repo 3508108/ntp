@@ -561,21 +561,36 @@ const gatewayHTML = `<!DOCTYPE html>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { min-height:100vh; display:grid; place-items:center; background:#f7f7f2; color:#171716; font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:24px; }
-  main { width:min(620px,100%); }
+  main { width:min(460px,100%); animation:rise 420ms ease-out both; }
   h1 { font-size:0.82rem; font-weight:650; color:#6f706c; letter-spacing:0.18em; text-transform:uppercase; margin-bottom:22px; }
-  form { display:grid; gap:16px; }
+  form { display:grid; gap:18px; }
   label { color:#6d6d68; font-size:0.68rem; font-weight:700; letter-spacing:0.18em; text-transform:uppercase; }
-  input { width:100%; height:58px; background:#fffefa; border:1px solid #d8d6ca; color:#11110f; padding:0 16px; border-radius:0; box-shadow:7px 7px 0 #dedbd0, inset 0 1px 0 #ffffff; font:1.15rem 'SF Mono','Courier New',monospace; outline:none; }
-  input:focus { border-color:#171716; box-shadow:7px 7px 0 #c9a84c, inset 0 1px 0 #ffffff; }
-  .digits { display:grid; grid-template-columns:repeat(7,1fr); gap:12px; margin:2px 0 4px; }
-  .digit { display:grid; gap:8px; }
-  .digit span { color:#818178; font:700 0.78rem 'SF Mono','Courier New',monospace; text-align:center; }
-  .digit input { aspect-ratio:1; height:auto; min-height:70px; padding:0; text-align:center; font-size:2rem; font-weight:800; }
-  button { width:100%; height:70px; border-radius:0; border:1px solid #171716; background:#171716; color:#fffefa; cursor:pointer; box-shadow:8px 8px 0 #c9a84c; font:2rem 'SF Mono','Courier New',monospace; transition:transform 120ms ease, box-shadow 120ms ease; }
+  input { width:100%; height:58px; background:#fffefa; border:1px solid #d8d6ca; color:#11110f; padding:0 16px; border-radius:0; box-shadow:7px 7px 0 #dedbd0, inset 0 1px 0 #ffffff; font:1.15rem 'SF Mono','Courier New',monospace; outline:none; transition:border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease, background 160ms ease; }
+  input:focus { border-color:#171716; box-shadow:7px 7px 0 #c9a84c, inset 0 1px 0 #ffffff; transform:translate(-1px,-1px); }
+  .digits { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:4px 0 2px; }
+  .digit { position:relative; display:grid; gap:8px; animation:tile-in 360ms ease-out both; }
+  .digit:nth-child(1) { animation-delay:20ms; }
+  .digit:nth-child(2) { animation-delay:55ms; }
+  .digit:nth-child(3) { animation-delay:90ms; }
+  .digit:nth-child(4) { animation-delay:125ms; }
+  .digit:nth-child(5) { animation-delay:160ms; }
+  .digit:nth-child(6) { animation-delay:195ms; }
+  .digit:nth-child(7) { animation-delay:230ms; }
+  .digit span { color:#818178; font:700 0.84rem 'SF Mono','Courier New',monospace; text-align:center; transition:color 160ms ease, transform 160ms ease; }
+  .digit input { aspect-ratio:1; height:auto; min-height:112px; padding:0; text-align:center; font-size:3rem; font-weight:850; }
+  .digit.next span, .digit.active span { color:#171716; transform:translateY(-1px); }
+  .digit.next input { border-color:#c9a84c; background:#fffdf4; box-shadow:9px 9px 0 #ead99a, inset 0 1px 0 #ffffff; animation:pulse-next 1.2s ease-in-out infinite; }
+  .digit.active input { border-color:#171716; box-shadow:9px 9px 0 #c9a84c, inset 0 1px 0 #ffffff; transform:translate(-2px,-2px); }
+  .digit.filled input { background:#ffffff; border-color:#bdb9aa; box-shadow:5px 5px 0 #d8d6ca, inset 0 1px 0 #ffffff; }
+  .digit:last-child { grid-column:1 / -1; width:calc(50% - 8px); justify-self:start; }
+  button { width:100%; height:74px; border-radius:0; border:1px solid #171716; background:#171716; color:#fffefa; cursor:pointer; box-shadow:8px 8px 0 #c9a84c; font:2.1rem 'SF Mono','Courier New',monospace; transition:transform 120ms ease, box-shadow 120ms ease, background 120ms ease; }
   button:hover { transform:translate(-2px,-2px); box-shadow:10px 10px 0 #c9a84c; }
   button:active { transform:translate(4px,4px); box-shadow:4px 4px 0 #c9a84c; }
   .hint { margin-top:18px; color:#8b8b84; font-size:0.72rem; line-height:1.6; font-family:'SF Mono','Courier New',monospace; }
-  @media (max-width:640px) { main { width:min(380px,100%); } .digits { grid-template-columns:repeat(4,1fr); gap:10px; } .digit input { min-height:76px; } }
+  @keyframes rise { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes tile-in { from { opacity:0; transform:translateY(10px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
+  @keyframes pulse-next { 0%,100% { transform:translate(0,0); } 50% { transform:translate(-2px,-2px); } }
+  @media (max-width:520px) { main { width:min(390px,100%); } .digits { gap:12px; } .digit input { min-height:96px; font-size:2.6rem; } .digit:last-child { width:calc(50% - 6px); } }
 </style>
 </head>
 <body>
@@ -598,15 +613,30 @@ const gatewayHTML = `<!DOCTYPE html>
   <p class="hint">Verified users only</p>
 </main>
 <script>
-  document.querySelectorAll('[data-digit]').forEach((input, index, inputs) => {
+  const inputs = [...document.querySelectorAll('[data-digit]')];
+  const paint = () => {
+    const next = inputs.findIndex(input => !input.value);
+    inputs.forEach((input, index) => {
+      const tile = input.closest('.digit');
+      tile.classList.toggle('filled', Boolean(input.value));
+      tile.classList.toggle('next', index === next);
+      tile.classList.toggle('active', document.activeElement === input);
+    });
+  };
+  inputs.forEach((input, index) => {
     input.addEventListener('input', () => {
       input.value = input.value.replace(/\D/g, '').slice(0, 1);
       if (input.value && inputs[index + 1]) inputs[index + 1].focus();
+      paint();
     });
+    input.addEventListener('focus', paint);
+    input.addEventListener('blur', paint);
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Backspace' && !input.value && inputs[index - 1]) inputs[index - 1].focus();
+      requestAnimationFrame(paint);
     });
   });
+  paint();
 </script>
 </body>
 </html>`
