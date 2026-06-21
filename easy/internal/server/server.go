@@ -42,26 +42,32 @@ type authReq struct {
 	ClientID string `json:"client_id"`
 	Sequence string `json:"sequence"`
 	Symbol   string `json:"symbol"`
-	D5       string `json:"d5"`
-	D4       string `json:"d4"`
-	D3       string `json:"d3"`
-	D6       string `json:"d6"`
-	D7       string `json:"d7"`
-	D2       string `json:"d2"`
-	D1       string `json:"d1"`
+	P1       string `json:"p1"`
+	P2       string `json:"p2"`
+	P3       string `json:"p3"`
+	P4       string `json:"p4"`
+	P5       string `json:"p5"`
+	P6       string `json:"p6"`
+	P7       string `json:"p7"`
+	P8       string `json:"p8"`
+	P9       string `json:"p9"`
+	P10      string `json:"p10"`
 }
 
 func (r authReq) submittedSequence() string {
 	if seq := strings.TrimSpace(r.Sequence); seq != "" {
 		return seq
 	}
-	return strings.TrimSpace(r.D5) +
-		strings.TrimSpace(r.D4) +
-		strings.TrimSpace(r.D3) +
-		strings.TrimSpace(r.D6) +
-		strings.TrimSpace(r.D7) +
-		strings.TrimSpace(r.D2) +
-		strings.TrimSpace(r.D1)
+	return strings.TrimSpace(r.P9) +
+		strings.TrimSpace(r.P8) +
+		strings.TrimSpace(r.P5) +
+		strings.TrimSpace(r.P4) +
+		strings.TrimSpace(r.P1) +
+		strings.TrimSpace(r.P2) +
+		strings.TrimSpace(r.P3) +
+		strings.TrimSpace(r.P6) +
+		strings.TrimSpace(r.P7) +
+		strings.TrimSpace(r.P10)
 }
 
 type streamRow struct {
@@ -248,7 +254,7 @@ func authPassword() string {
 	if p := os.Getenv("EASY_PASSWORD"); p != "" {
 		return p
 	}
-	return "1800853"
+	return "3508108218"
 }
 
 func (s *Server) requireAuth(c *gin.Context) {
@@ -317,13 +323,16 @@ func (s *Server) handleAuth(c *gin.Context) {
 	} else {
 		req.ClientID = c.PostForm("client_id")
 		req.Sequence = c.PostForm("sequence")
-		req.D5 = c.PostForm("d5")
-		req.D4 = c.PostForm("d4")
-		req.D3 = c.PostForm("d3")
-		req.D6 = c.PostForm("d6")
-		req.D7 = c.PostForm("d7")
-		req.D2 = c.PostForm("d2")
-		req.D1 = c.PostForm("d1")
+		req.P1 = c.PostForm("p1")
+		req.P2 = c.PostForm("p2")
+		req.P3 = c.PostForm("p3")
+		req.P4 = c.PostForm("p4")
+		req.P5 = c.PostForm("p5")
+		req.P6 = c.PostForm("p6")
+		req.P7 = c.PostForm("p7")
+		req.P8 = c.PostForm("p8")
+		req.P9 = c.PostForm("p9")
+		req.P10 = c.PostForm("p10")
 		req.Symbol = c.PostForm("symbol")
 	}
 	req.ClientID = strings.TrimSpace(req.ClientID)
@@ -560,15 +569,15 @@ const gatewayHTML = `<!DOCTYPE html>
 <title>karpenkodima0000.com</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { min-height:100vh; display:grid; place-items:center; background:#f7f7f2; color:#171716; font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:24px; }
-  main { width:min(460px,100%); animation:rise 420ms ease-out both; }
-  h1 { font-size:0.82rem; font-weight:650; color:#6f706c; letter-spacing:0.18em; text-transform:uppercase; margin-bottom:22px; }
-  form { display:grid; gap:18px; }
+  body { min-height:100vh; display:grid; place-items:center; background:#f7f7f2; color:#171716; font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:18px; overflow:hidden; }
+  main { --cell:clamp(54px, min(11vh, 31vw), 92px); width:min(390px,100%); animation:rise 420ms ease-out both; }
+  h1 { font-size:0.78rem; font-weight:650; color:#6f706c; letter-spacing:0.18em; text-transform:uppercase; margin-bottom:14px; }
+  form { display:grid; gap:14px; }
   label { color:#6d6d68; font-size:0.68rem; font-weight:700; letter-spacing:0.18em; text-transform:uppercase; }
-  input { width:100%; height:58px; background:#fffefa; border:1px solid #d8d6ca; color:#11110f; padding:0 16px; border-radius:0; box-shadow:7px 7px 0 #dedbd0, inset 0 1px 0 #ffffff; font:1.15rem 'SF Mono','Courier New',monospace; outline:none; transition:border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease, background 160ms ease; }
+  input { width:100%; height:54px; background:#fffefa; border:1px solid #d8d6ca; color:#11110f; padding:0 16px; border-radius:0; box-shadow:7px 7px 0 #dedbd0, inset 0 1px 0 #ffffff; font:1.08rem 'SF Mono','Courier New',monospace; outline:none; transition:border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease, background 160ms ease; }
   input:focus { border-color:#171716; box-shadow:7px 7px 0 #c9a84c, inset 0 1px 0 #ffffff; transform:translate(-1px,-1px); }
-  .digits { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:4px 0 2px; }
-  .digit { position:relative; display:grid; gap:8px; animation:tile-in 360ms ease-out both; }
+  .digits { display:grid; grid-template-columns:repeat(2,var(--cell)); grid-template-rows:repeat(5,var(--cell)); justify-content:center; gap:10px; margin:2px 0 0; }
+  .digit { position:relative; display:grid; animation:tile-in 360ms ease-out both; }
   .digit:nth-child(1) { animation-delay:20ms; }
   .digit:nth-child(2) { animation-delay:55ms; }
   .digit:nth-child(3) { animation-delay:90ms; }
@@ -576,21 +585,21 @@ const gatewayHTML = `<!DOCTYPE html>
   .digit:nth-child(5) { animation-delay:160ms; }
   .digit:nth-child(6) { animation-delay:195ms; }
   .digit:nth-child(7) { animation-delay:230ms; }
-  .digit span { color:#818178; font:700 0.84rem 'SF Mono','Courier New',monospace; text-align:center; transition:color 160ms ease, transform 160ms ease; }
-  .digit input { aspect-ratio:1; height:auto; min-height:112px; padding:0; text-align:center; font-size:3rem; font-weight:850; }
-  .digit.next span, .digit.active span { color:#171716; transform:translateY(-1px); }
+  .digit:nth-child(8) { animation-delay:265ms; }
+  .digit:nth-child(9) { animation-delay:300ms; }
+  .digit:nth-child(10) { animation-delay:335ms; }
+  .digit input { width:var(--cell); height:var(--cell); padding:0; text-align:center; font-size:clamp(1.8rem, 5.5vh, 3rem); font-weight:850; }
   .digit.next input { border-color:#c9a84c; background:#fffdf4; box-shadow:9px 9px 0 #ead99a, inset 0 1px 0 #ffffff; animation:pulse-next 1.2s ease-in-out infinite; }
   .digit.active input { border-color:#171716; box-shadow:9px 9px 0 #c9a84c, inset 0 1px 0 #ffffff; transform:translate(-2px,-2px); }
   .digit.filled input { background:#ffffff; border-color:#bdb9aa; box-shadow:5px 5px 0 #d8d6ca, inset 0 1px 0 #ffffff; }
-  .digit:last-child { grid-column:1 / -1; width:calc(50% - 8px); justify-self:start; }
-  button { width:100%; height:74px; border-radius:0; border:1px solid #171716; background:#171716; color:#fffefa; cursor:pointer; box-shadow:8px 8px 0 #c9a84c; font:2.1rem 'SF Mono','Courier New',monospace; transition:transform 120ms ease, box-shadow 120ms ease, background 120ms ease; }
+  button { width:100%; height:64px; border-radius:0; border:1px solid #171716; background:#171716; color:#fffefa; cursor:pointer; box-shadow:8px 8px 0 #c9a84c; font:2rem 'SF Mono','Courier New',monospace; transition:transform 120ms ease, box-shadow 120ms ease, background 120ms ease; }
   button:hover { transform:translate(-2px,-2px); box-shadow:10px 10px 0 #c9a84c; }
   button:active { transform:translate(4px,4px); box-shadow:4px 4px 0 #c9a84c; }
-  .hint { margin-top:18px; color:#8b8b84; font-size:0.72rem; line-height:1.6; font-family:'SF Mono','Courier New',monospace; }
+  .hint { margin-top:14px; color:#8b8b84; font-size:0.72rem; line-height:1.6; font-family:'SF Mono','Courier New',monospace; }
   @keyframes rise { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
   @keyframes tile-in { from { opacity:0; transform:translateY(10px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
   @keyframes pulse-next { 0%,100% { transform:translate(0,0); } 50% { transform:translate(-2px,-2px); } }
-  @media (max-width:520px) { main { width:min(390px,100%); } .digits { gap:12px; } .digit input { min-height:96px; font-size:2.6rem; } .digit:last-child { width:calc(50% - 6px); } }
+  @media (max-height:640px) { body { padding:12px; } main { --cell:clamp(48px, 10vh, 64px); width:min(340px,100%); } h1 { margin-bottom:10px; } form { gap:10px; } input { height:46px; } button { height:56px; } .hint { margin-top:10px; } }
 </style>
 </head>
 <body>
@@ -600,20 +609,24 @@ const gatewayHTML = `<!DOCTYPE html>
     <label for="client_id">client id</label>
     <input id="client_id" name="client_id" type="text" autocomplete="username" required>
     <div class="digits" aria-label="access digits">
-      <label class="digit" for="d5"><span>5</span><input id="d5" name="d5" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
-      <label class="digit" for="d4"><span>4</span><input id="d4" name="d4" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
-      <label class="digit" for="d3"><span>3</span><input id="d3" name="d3" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
-      <label class="digit" for="d6"><span>6</span><input id="d6" name="d6" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
-      <label class="digit" for="d7"><span>7</span><input id="d7" name="d7" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
-      <label class="digit" for="d2"><span>2</span><input id="d2" name="d2" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
-      <label class="digit" for="d1"><span>1</span><input id="d1" name="d1" data-digit type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="p1"><input id="p1" name="p1" data-digit data-route="5" aria-label="access field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="p2"><input id="p2" name="p2" data-digit data-route="6" aria-label="access field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="p3"><input id="p3" name="p3" data-digit data-route="7" aria-label="access field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="p4"><input id="p4" name="p4" data-digit data-route="4" aria-label="access field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="p5"><input id="p5" name="p5" data-digit data-route="3" aria-label="access field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="p6"><input id="p6" name="p6" data-digit data-route="8" aria-label="access field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="p7"><input id="p7" name="p7" data-digit data-route="9" aria-label="access field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="p8"><input id="p8" name="p8" data-digit data-route="2" aria-label="access field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="p9"><input id="p9" name="p9" data-digit data-route="1" aria-label="access field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
+      <label class="digit" for="p10"><input id="p10" name="p10" data-digit data-route="10" aria-label="access field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" required></label>
     </div>
     <button type="submit" name="symbol" value="🫆">🫆</button>
   </form>
   <p class="hint">Verified users only</p>
 </main>
 <script>
-  const inputs = [...document.querySelectorAll('[data-digit]')];
+  const inputs = [...document.querySelectorAll('[data-digit]')]
+    .sort((a, b) => Number(a.dataset.route) - Number(b.dataset.route));
   const paint = () => {
     const next = inputs.findIndex(input => !input.value);
     inputs.forEach((input, index) => {

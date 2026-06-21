@@ -31,7 +31,7 @@ func newTestServer(t *testing.T) (*Server, *store.DB) {
 
 func addAuth(req *http.Request) {
 	req.Header.Set("X-Client-ID", "test-client")
-	req.Header.Set("X-Password", "1800853")
+	req.Header.Set("X-Password", "3508108218")
 }
 
 func TestApexRootShowsGatewayWithoutAuth(t *testing.T) {
@@ -46,14 +46,20 @@ func TestApexRootShowsGatewayWithoutAuth(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `name="client_id"`) || !strings.Contains(body, `name="d5"`) || !strings.Contains(body, `name="d1"`) {
+	if !strings.Contains(body, `name="client_id"`) || !strings.Contains(body, `name="p1"`) || !strings.Contains(body, `name="p10"`) {
 		t.Fatalf("gateway missing expected fields: %s", rec.Body.String())
 	}
 	if strings.Contains(body, `name="sequence"`) || strings.Contains(body, `>sequence<`) {
 		t.Fatalf("gateway still exposes sequence field: %s", rec.Body.String())
 	}
+	if strings.Contains(body, `name="d5"`) || strings.Contains(body, `<span>5</span>`) {
+		t.Fatalf("gateway still exposes old digit hints: %s", rec.Body.String())
+	}
 	if strings.Contains(body, `value="≠"`) {
 		t.Fatalf("gateway still exposes not-equal action: %s", rec.Body.String())
+	}
+	if !strings.Contains(body, `grid-template-columns:repeat(2,var(--cell))`) || !strings.Contains(body, `data-route="1"`) || !strings.Contains(body, `data-route="10"`) {
+		t.Fatalf("gateway missing 2-column diagonal route: %s", rec.Body.String())
 	}
 }
 
@@ -175,7 +181,7 @@ func TestHandleSetIntervalRejectsInvalidDuration(t *testing.T) {
 func TestAuthAcceptsClientIDDigitsAndSymbol(t *testing.T) {
 	srv, _ := newTestServer(t)
 
-	req := httptest.NewRequest(http.MethodPost, "/auth", strings.NewReader(`{"client_id":"string","d5":"1","d4":"8","d3":"0","d6":"0","d7":"8","d2":"5","d1":"3","symbol":"🫆"}`))
+	req := httptest.NewRequest(http.MethodPost, "/auth", strings.NewReader(`{"client_id":"string","p1":"1","p2":"0","p3":"8","p4":"8","p5":"0","p6":"2","p7":"1","p8":"5","p9":"3","p10":"8","symbol":"🫆"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	rec := httptest.NewRecorder()
@@ -210,9 +216,10 @@ func TestAuthRejectsWrongSequenceAndNotEqualSymbol(t *testing.T) {
 	srv, _ := newTestServer(t)
 
 	for _, body := range []string{
-		`{"client_id":"string","d5":"1","d4":"8","d3":"0","d6":"0","d7":"8","d2":"5","d1":"2","symbol":"🫆"}`,
-		`{"client_id":"string","d5":"1","d4":"8","d3":"0","d6":"0","d7":"8","d2":"5","d1":"3","symbol":"≠"}`,
-		`{"client_id":"","d5":"1","d4":"8","d3":"0","d6":"0","d7":"8","d2":"5","d1":"3","symbol":"🫆"}`,
+		`{"client_id":"string","p1":"1","p2":"0","p3":"8","p4":"8","p5":"0","p6":"2","p7":"1","p8":"5","p9":"3","p10":"7","symbol":"🫆"}`,
+		`{"client_id":"string","p1":"1","p2":"0","p3":"8","p4":"8","p5":"0","p6":"2","p7":"1","p8":"5","p9":"3","p10":"8","symbol":"≠"}`,
+		`{"client_id":"","p1":"1","p2":"0","p3":"8","p4":"8","p5":"0","p6":"2","p7":"1","p8":"5","p9":"3","p10":"8","symbol":"🫆"}`,
+		`{"client_id":"string","sequence":"1800853","symbol":"🫆"}`,
 	} {
 		req := httptest.NewRequest(http.MethodPost, "/auth", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
