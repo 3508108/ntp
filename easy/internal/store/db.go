@@ -101,39 +101,19 @@ type Row struct {
 	CreatedAt    float64 `json:"created_at"`
 }
 
-func (db *DB) InsertPing0000(timeStr, timestamp, device, action string) error {
-	db.writeLock.Lock()
-	defer db.writeLock.Unlock()
-	_, err := db.conn.Exec(
-		`INSERT INTO ping_0000 (time_str, timestamp, device, action, created_at)
-		 VALUES (?, ?, ?, ?, ?)`,
-		timeStr, timestamp, device, action, time.Now().UnixNano()/1e6,
-	)
-	return err
-}
-
-type Ping0000 struct {
-	ID        int64   `json:"id"`
-	TimeStr   string  `json:"time"`
-	Timestamp string  `json:"timestamp"`
-	Device    string  `json:"device"`
-	Action    string  `json:"action"`
-	CreatedAt float64 `json:"created_at"`
-}
-
-func (db *DB) RecentPing0000(n int) ([]Ping0000, error) {
+func (db *DB) Recent(n int) ([]Row, error) {
 	rows, err := db.conn.Query(
-		`SELECT id, time_str, timestamp, device, action, created_at
-		 FROM ping_0000 ORDER BY created_at DESC LIMIT ?`, n)
+		`SELECT id, probe, date_time, unix_ms, server_ms, cloudflare_ms, ntp_name, created_at
+		 FROM time_log ORDER BY created_at DESC, id DESC LIMIT ?`, n)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var out []Ping0000
+	var out []Row
 	for rows.Next() {
-		var r Ping0000
-		err := rows.Scan(&r.ID, &r.TimeStr, &r.Timestamp, &r.Device, &r.Action, &r.CreatedAt)
+		var r Row
+		err := rows.Scan(&r.ID, &r.Probe, &r.DateTime, &r.UnixMs, &r.ServerMs, &r.CloudflareMs, &r.NtpName, &r.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -142,10 +122,17 @@ func (db *DB) RecentPing0000(n int) ([]Ping0000, error) {
 	return out, rows.Err()
 }
 
-func (db *DB) Recent(n int) ([]Row, error) {
-	rows, err := db.conn.Query(
-		`SELECT id, probe, date_time, unix_ms, server_ms, cloudflare_ms, ntp_name, created_at
-		 FROM time_log ORDER BY created_at DESC LIMIT ?`, n)
+func (db *DB) LogsSince(createdAtMs int64) ([]Row, error) {
+	query := `SELECT id, probe, date_time, unix_ms, server_ms, cloudflare_ms, ntp_name, created_at
+		 FROM time_log`
+	args := []any{}
+	if createdAtMs > 0 {
+		query += ` WHERE created_at >= ?`
+		args = append(args, createdAtMs)
+	}
+	query += ` ORDER BY created_at DESC, id DESC`
+
+	rows, err := db.conn.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

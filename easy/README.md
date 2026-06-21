@@ -9,16 +9,18 @@
 
 ## API
 - `GET /` — HTML dashboard.
-- `GET /api/recent` — останні записи (`rows`).
-- `GET /api/stream` — SSE-потік оновлень.
+- `GET /login` / `POST /login` — auth form/API (`client_id`, `password`).
+- `GET /api/logs?range=hour|day|week|all` — повні time logs, newest first.
+- `GET /api/recent` — останні 500 записів (`rows`).
+- `GET /api/stream` — SSE-потік нових записів.
 - `GET /api/interval` — поточний інтервал опитування.
 - `POST /api/interval` — встановлення нового інтервалу (`{"interval":"10s"}`).
-- `POST /0000` — запис мобільного ping (`time`, `timestamp`, `device`, `action`).
 
 ## Змінні середовища
 - `EASY_DB` (default: `easy.db`)
 - `EASY_PORT` (default: `8080`)
 - `EASY_INTERVAL` (default: `10s`, мінімум у коді: `5s`)
+- `EASY_PASSWORD` (default: `350810818`)
 
 ## Локальний запуск
 ```bash

@@ -8,6 +8,7 @@ WorkingDirectory=/opt/easy
 Environment=EASY_DB=/var/lib/easy/easy.db
 Environment=EASY_PORT=8080
 Environment=EASY_INTERVAL=10s
+Environment=EASY_PASSWORD=350810818
 ExecStart=/opt/easy/easy
 ExecStop=/bin/kill -TERM $MAINPID
 Restart=always

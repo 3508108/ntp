@@ -45,23 +45,22 @@ func TestInsertAndRecent(t *testing.T) {
 	}
 }
 
-func TestInsertPing0000AndRecent(t *testing.T) {
+func TestLogsSinceReturnsStoredRows(t *testing.T) {
 	db := openTestDB(t)
 
-	if err := db.InsertPing0000("12:00", "1000", "phone", "ping"); err != nil {
-		t.Fatalf("InsertPing0000() error = %v", err)
+	if err := db.Insert("apple", "2026-06-21 12:00:00.000", 1000, 995, 0, "time.apple.com"); err != nil {
+		t.Fatalf("Insert() error = %v", err)
 	}
 
-	rows, err := db.RecentPing0000(10)
+	rows, err := db.LogsSince(1)
 	if err != nil {
-		t.Fatalf("RecentPing0000() error = %v", err)
+		t.Fatalf("LogsSince() error = %v", err)
 	}
 	if len(rows) != 1 {
-		t.Fatalf("RecentPing0000() len = %d, want 1", len(rows))
+		t.Fatalf("LogsSince() len = %d, want 1", len(rows))
 	}
 
-	row := rows[0]
-	if row.TimeStr != "12:00" || row.Timestamp != "1000" || row.Device != "phone" || row.Action != "ping" {
-		t.Fatalf("RecentPing0000() row = %+v", row)
+	if rows[0].Probe != "apple" {
+		t.Fatalf("LogsSince() row = %+v", rows[0])
 	}
 }
