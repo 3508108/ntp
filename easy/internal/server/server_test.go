@@ -246,6 +246,16 @@ func TestCookieOpensProtectedRouteAndTamperedCookieFails(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("tampered status = %d, body = %s", rec.Code, rec.Body.String())
 	}
+
+	expired := &http.Cookie{Name: authCookie, Value: srv.makeToken("string", time.Now().Add(-time.Minute))}
+	req = httptest.NewRequest(http.MethodGet, "/api/logs?range=hour", nil)
+	req.Header.Set("Accept", "application/json")
+	req.AddCookie(expired)
+	rec = httptest.NewRecorder()
+	srv.engine.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expired status = %d, body = %s", rec.Code, rec.Body.String())
+	}
 }
 
 func Test0000RouteRemoved(t *testing.T) {
