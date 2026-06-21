@@ -1,0 +1,16 @@
+services:
+  easy:
+    build: .
+    image: ntp-easy:local
+    restart: unless-stopped
+    ports:
+      - "${EASY_PORT:-8080}:8080"
+    environment:
+      EASY_DB: /data/easy.db
+      EASY_PORT: 8080
+      EASY_INTERVAL: ${EASY_INTERVAL:-10s}
+    volumes:
+      - easy-data:/data
+
+volumes:
+  easy-data:

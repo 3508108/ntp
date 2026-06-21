@@ -2,7 +2,7 @@ package server
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"io"
 	"net/http"
 	"time"
@@ -22,6 +22,15 @@ type Server struct {
 
 type intervalReq struct {
 	Interval string `json:"interval"`
+}
+
+type streamRow struct {
+	Probe    string `json:"probe"`
+	DateTime string `json:"date_time"`
+	UnixMs   int64  `json:"unix_ms"`
+	ServerMs int64  `json:"server_ms"`
+	Delta    int64  `json:"delta"`
+	NtpName  string `json:"ntp_name"`
 }
 
 func New(db *store.DB, f *fetcher.Fetcher) *Server {
@@ -77,16 +86,39 @@ func (s *Server) handleStream(c *gin.Context) {
 		return
 	}
 
+	var lastID int64
 	c.Stream(func(w io.Writer) bool {
-		rows, err := s.db.Recent(1)
-		if err == nil && len(rows) > 0 {
-			r := rows[0]
-			fmt.Fprintf(w, "data: {\"probe\":\"%s\",\"date_time\":\"%s\",\"unix_ms\":%d,\"server_ms\":%d,\"delta\":%d,\"ntp_name\":\"%s\"}\n\n",
-				r.Probe, r.DateTime, r.UnixMs, r.ServerMs, r.UnixMs-r.ServerMs, r.NtpName)
-			flusher.Flush()
+		select {
+		case <-c.Request.Context().Done():
+			return false
+		default:
 		}
-		time.Sleep(500 * time.Millisecond)
-		return true
+
+		rows, err := s.db.Recent(1)
+		if err == nil && len(rows) > 0 && rows[0].ID != lastID {
+			r := rows[0]
+			lastID = r.ID
+			payload, err := json.Marshal(streamRow{
+				Probe:    r.Probe,
+				DateTime: r.DateTime,
+				UnixMs:   r.UnixMs,
+				ServerMs: r.ServerMs,
+				Delta:    r.UnixMs - r.ServerMs,
+				NtpName:  r.NtpName,
+			})
+			if err == nil {
+				w.Write([]byte("data: "))
+				w.Write(payload)
+				w.Write([]byte("\n\n"))
+				flusher.Flush()
+			}
+		}
+		select {
+		case <-c.Request.Context().Done():
+			return false
+		case <-time.After(500 * time.Millisecond):
+			return true
+		}
 	})
 }
 

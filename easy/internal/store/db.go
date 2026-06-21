@@ -91,14 +91,14 @@ func (db *DB) Insert(probe, dateTime string, unixMs, serverMs, cloudflareMs int6
 }
 
 type Row struct {
-	ID           int64
-	Probe        string
-	DateTime     string
-	UnixMs       int64
-	ServerMs     int64
-	CloudflareMs int64
-	NtpName      string
-	CreatedAt    float64
+	ID           int64   `json:"id"`
+	Probe        string  `json:"probe"`
+	DateTime     string  `json:"date_time"`
+	UnixMs       int64   `json:"unix_ms"`
+	ServerMs     int64   `json:"server_ms"`
+	CloudflareMs int64   `json:"cloudflare_ms"`
+	NtpName      string  `json:"ntp_name"`
+	CreatedAt    float64 `json:"created_at"`
 }
 
 func (db *DB) InsertPing0000(timeStr, timestamp, device, action string) error {
@@ -113,12 +113,12 @@ func (db *DB) InsertPing0000(timeStr, timestamp, device, action string) error {
 }
 
 type Ping0000 struct {
-	ID        int64
-	TimeStr   string
-	Timestamp string
-	Device    string
-	Action    string
-	CreatedAt float64
+	ID        int64   `json:"id"`
+	TimeStr   string  `json:"time"`
+	Timestamp string  `json:"timestamp"`
+	Device    string  `json:"device"`
+	Action    string  `json:"action"`
+	CreatedAt float64 `json:"created_at"`
 }
 
 func (db *DB) RecentPing0000(n int) ([]Ping0000, error) {

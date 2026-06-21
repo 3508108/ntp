@@ -1,0 +1,12 @@
+.git
+.DS_Store
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.log
+easy
+easy.exe
+easy-linux
+Dockerfile
+docker-compose.yml

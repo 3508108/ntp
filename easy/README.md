@@ -26,6 +26,32 @@ go build ./...
 go run .
 ```
 
+## Тести
+```bash
+go test ./...
+```
+
+## Docker
+Збірка образу:
+```bash
+make docker-build
+```
+
+Запуск одним контейнером з persistent volume для SQLite:
+```bash
+make docker-run
+```
+
+Запуск через Compose:
+```bash
+docker compose up --build
+```
+
+Контейнер слухає `8080`, зберігає SQLite у `/data/easy.db` і приймає ті самі змінні середовища:
+- `EASY_DB`
+- `EASY_PORT`
+- `EASY_INTERVAL`
+
 ## Деплой (systemd)
 Сервіс у проді запускається як systemd unit `easy` (див. `easy.service`).
 

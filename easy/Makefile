@@ -1,4 +1,6 @@
 GO ?= go
+DOCKER ?= docker
+COMPOSE ?= docker compose
 
 HOST ?= easy-droplet
 APP_DIR ?= /opt/easy
@@ -6,6 +8,7 @@ SERVICE ?= easy
 
 BIN_LOCAL ?= easy
 BIN_LINUX ?= easy-linux
+IMAGE ?= ntp-easy:local
 
 .PHONY: build
 build:
@@ -22,6 +25,22 @@ run:
 .PHONY: test
 test:
 	$(GO) test ./...
+
+.PHONY: docker-build
+docker-build:
+	$(DOCKER) build -t $(IMAGE) .
+
+.PHONY: docker-run
+docker-run: docker-build
+	$(DOCKER) run --rm -p $${EASY_PORT:-8080}:8080 -e EASY_DB=/data/easy.db -e EASY_INTERVAL=$${EASY_INTERVAL:-10s} -v ntp-easy-data:/data $(IMAGE)
+
+.PHONY: docker-up
+docker-up:
+	$(COMPOSE) up --build
+
+.PHONY: docker-down
+docker-down:
+	$(COMPOSE) down
 
 .PHONY: deploy
 deploy: build-linux
